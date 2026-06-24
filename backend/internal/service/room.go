@@ -32,9 +32,9 @@ type DirectRoomResult struct {
 
 // RoomListItem is a room entry for the authenticated user.
 type RoomListItem struct {
-	ID        int64
-	PeerID    int64
-	PeerEmail string
+	ID        int64  `json:"id"`
+	PeerID    int64  `json:"peer_id"`
+	PeerEmail string `json:"peer_email"`
 }
 
 // GetOrCreateDirect returns an existing or newly created 1:1 room.

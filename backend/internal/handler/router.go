@@ -8,7 +8,7 @@ import (
 )
 
 // NewRouter registers HTTP routes and middleware.
-func NewRouter(logger *slog.Logger, store repository.Store, auth *AuthHandler, me *MeHandler, rooms *RoomsHandler, jwtSecret string) http.Handler {
+func NewRouter(logger *slog.Logger, store repository.Store, auth *AuthHandler, me *MeHandler, rooms *RoomsHandler, messages *MessagesHandler, jwtSecret string) http.Handler {
 	mux := http.NewServeMux()
 
 	health := NewHealthHandler(store)
@@ -21,6 +21,8 @@ func NewRouter(logger *slog.Logger, store repository.Store, auth *AuthHandler, m
 	mux.Handle("GET /auth/me", RequireAuth(jwtSecret, me))
 	mux.Handle("POST /rooms/direct", RequireAuth(jwtSecret, rooms))
 	mux.Handle("GET /rooms", RequireAuth(jwtSecret, rooms))
+	mux.Handle("POST /rooms/{id}/messages", RequireAuth(jwtSecret, messages))
+	mux.Handle("GET /rooms/{id}/messages", RequireAuth(jwtSecret, messages))
 
 	return loggingMiddleware(logger, mux)
 }

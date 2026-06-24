@@ -8,4 +8,5 @@ type Store interface {
 	Ping(ctx context.Context) error
 	UserStore
 	RoomStore
+	MessageStore
 }

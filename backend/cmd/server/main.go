@@ -34,7 +34,9 @@ func main() {
 	meHandler := handler.NewMeHandler()
 	roomService := service.NewRoomService(store, store)
 	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
-	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, cfg.JWTSecret)
+	messageService := service.NewMessageService(store, store)
+	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

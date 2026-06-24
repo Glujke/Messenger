@@ -27,6 +27,10 @@ func (m *mockRoomStore) ListUserRooms(ctx context.Context, userID int64) ([]repo
 	return m.listFn(ctx, userID)
 }
 
+func (m *mockRoomStore) IsRoomMember(context.Context, int64, int64) (bool, error) {
+	return false, nil
+}
+
 type mockUserStoreWithID struct {
 	findByIDFn func(ctx context.Context, id int64) (repository.UserRecord, error)
 }

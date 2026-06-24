@@ -23,4 +23,5 @@ type RoomStore interface {
 	FindDirectRoom(ctx context.Context, userA, userB int64) (int64, bool, error)
 	CreateDirectRoom(ctx context.Context, userA, userB int64) (int64, error)
 	ListUserRooms(ctx context.Context, userID int64) ([]RoomListRecord, error)
+	IsRoomMember(ctx context.Context, roomID, userID int64) (bool, error)
 }

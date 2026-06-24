@@ -101,3 +101,21 @@ func (s *Store) ListUserRooms(ctx context.Context, userID int64) ([]repository.R
 
 	return rooms, nil
 }
+
+// IsRoomMember reports whether the user belongs to the room.
+func (s *Store) IsRoomMember(ctx context.Context, roomID, userID int64) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM room_members
+			WHERE room_id = $1 AND user_id = $2
+		)
+	`
+
+	var isMember bool
+	err := s.db.QueryRowContext(ctx, query, roomID, userID).Scan(&isMember)
+	if err != nil {
+		return false, err
+	}
+	return isMember, nil
+}
