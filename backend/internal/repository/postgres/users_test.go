@@ -113,3 +113,30 @@ func TestStore_FindByEmail_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStore_FindByID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	createdAt := time.Now()
+
+	mock.ExpectQuery(`SELECT id, email, password_hash, verified, created_at`).
+		WithArgs(int64(2)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "verified", "created_at"}).
+			AddRow(int64(2), "peer@example.com", "hash", true, createdAt))
+
+	record, err := store.FindByID(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if record.ID != 2 || record.Email != "peer@example.com" {
+		t.Fatalf("record = %+v", record)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

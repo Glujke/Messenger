@@ -24,4 +24,5 @@ type UserRecord struct {
 type UserStore interface {
 	CreateUser(ctx context.Context, email, passwordHash string) (UserRecord, error)
 	FindByEmail(ctx context.Context, email string) (UserRecord, error)
+	FindByID(ctx context.Context, id int64) (UserRecord, error)
 }

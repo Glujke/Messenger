@@ -25,6 +25,10 @@ func (m *mockUserStore) FindByEmail(ctx context.Context, email string) (reposito
 	return m.findFn(ctx, email)
 }
 
+func (m *mockUserStore) FindByID(context.Context, int64) (repository.UserRecord, error) {
+	return repository.UserRecord{}, repository.ErrNotFound
+}
+
 func TestAuthService_Register(t *testing.T) {
 	store := &mockUserStore{
 		createFn: func(_ context.Context, email, passwordHash string) (repository.UserRecord, error) {

@@ -32,7 +32,9 @@ func main() {
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
 	authHandler := handler.NewAuthHandler(authService, authService)
 	meHandler := handler.NewMeHandler()
-	router := handler.NewRouter(logger, store, authHandler, meHandler, cfg.JWTSecret)
+	roomService := service.NewRoomService(store, store)
+	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

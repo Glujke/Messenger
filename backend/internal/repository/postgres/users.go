@@ -63,3 +63,29 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (repository.UserR
 
 	return record, nil
 }
+
+// FindByID loads a user by primary key.
+func (s *Store) FindByID(ctx context.Context, id int64) (repository.UserRecord, error) {
+	const query = `
+		SELECT id, email, password_hash, verified, created_at
+		FROM users
+		WHERE id = $1
+	`
+
+	var record repository.UserRecord
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&record.ID,
+		&record.Email,
+		&record.PasswordHash,
+		&record.Verified,
+		&record.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return repository.UserRecord{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return repository.UserRecord{}, err
+	}
+
+	return record, nil
+}
