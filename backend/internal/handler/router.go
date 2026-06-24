@@ -8,13 +8,16 @@ import (
 )
 
 // NewRouter registers HTTP routes and middleware.
-func NewRouter(logger *slog.Logger, store repository.Store) http.Handler {
+func NewRouter(logger *slog.Logger, store repository.Store, auth *AuthHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	health := NewHealthHandler(store)
 	mux.Handle("GET /health", health)
 	mux.Handle("GET /health/live", health)
 	mux.Handle("GET /health/ready", health)
+
+	mux.Handle("POST /auth/register", auth)
+	mux.Handle("POST /auth/login", auth)
 
 	return loggingMiddleware(logger, mux)
 }

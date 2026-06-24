@@ -14,6 +14,7 @@ import (
 	"messenger/backend/internal/handler"
 	"messenger/backend/internal/platform/db"
 	"messenger/backend/internal/repository/postgres"
+	"messenger/backend/internal/service"
 )
 
 func main() {
@@ -28,7 +29,9 @@ func main() {
 	defer database.Close()
 
 	store := postgres.NewStore(database)
-	router := handler.NewRouter(logger, store)
+	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
+	authHandler := handler.NewAuthHandler(authService, authService)
+	router := handler.NewRouter(logger, store, authHandler)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,
