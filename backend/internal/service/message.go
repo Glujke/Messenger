@@ -16,17 +16,24 @@ const (
 	maxMessageLimit     = 100
 )
 
+// MessageBroadcaster pushes realtime message events to connected clients.
+type MessageBroadcaster interface {
+	BroadcastMessage(roomID int64, item MessageItem)
+}
+
 // MessageService handles chat message use cases.
 type MessageService struct {
-	rooms    repository.RoomStore
-	messages repository.MessageStore
+	rooms       repository.RoomStore
+	messages    repository.MessageStore
+	broadcaster MessageBroadcaster
 }
 
 // NewMessageService creates a message service.
-func NewMessageService(rooms repository.RoomStore, messages repository.MessageStore) *MessageService {
+func NewMessageService(rooms repository.RoomStore, messages repository.MessageStore, broadcaster MessageBroadcaster) *MessageService {
 	return &MessageService{
-		rooms:    rooms,
-		messages: messages,
+		rooms:       rooms,
+		messages:    messages,
+		broadcaster: broadcaster,
 	}
 }
 
@@ -60,7 +67,11 @@ func (s *MessageService) SendText(ctx context.Context, roomID, senderID int64, b
 		return MessageItem{}, err
 	}
 
-	return toMessageItem(record), nil
+	item := toMessageItem(record)
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastMessage(roomID, item)
+	}
+	return item, nil
 }
 
 // List returns recent messages for a room member.

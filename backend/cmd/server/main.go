@@ -29,14 +29,16 @@ func main() {
 	defer database.Close()
 
 	store := postgres.NewStore(database)
+	hub := service.NewHub()
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
 	authHandler := handler.NewAuthHandler(authService, authService)
 	meHandler := handler.NewMeHandler()
 	roomService := service.NewRoomService(store, store)
 	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
-	messageService := service.NewMessageService(store, store)
+	messageService := service.NewMessageService(store, store, hub)
 	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
-	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, cfg.JWTSecret)
+	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, store, logger)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, wsHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

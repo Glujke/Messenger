@@ -62,7 +62,7 @@ func TestMessageService_SendText(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages)
+	svc := NewMessageService(rooms, messages, nil)
 	item, err := svc.SendText(context.Background(), 1, 2, "hello")
 	if err != nil {
 		t.Fatalf("SendText() error = %v", err)
@@ -78,7 +78,7 @@ func TestMessageService_SendText_NotMember(t *testing.T) {
 			return false, nil
 		},
 	}
-	svc := NewMessageService(rooms, &mockMessageStore{})
+	svc := NewMessageService(rooms, &mockMessageStore{}, nil)
 	_, err := svc.SendText(context.Background(), 1, 2, "hello")
 	if !errors.Is(err, ErrNotRoomMember) {
 		t.Fatalf("SendText() error = %v, want %v", err, ErrNotRoomMember)
@@ -86,11 +86,47 @@ func TestMessageService_SendText_NotMember(t *testing.T) {
 }
 
 func TestMessageService_SendText_InvalidBody(t *testing.T) {
-	svc := NewMessageService(&mockRoomStoreWithMember{}, &mockMessageStore{})
+	svc := NewMessageService(&mockRoomStoreWithMember{}, &mockMessageStore{}, nil)
 	_, err := svc.SendText(context.Background(), 1, 2, "   ")
 	if !errors.Is(err, domain.ErrEmptyMessageBody) {
 		t.Fatalf("SendText() error = %v, want %v", err, domain.ErrEmptyMessageBody)
 	}
+}
+
+func TestMessageService_SendText_Broadcasts(t *testing.T) {
+	rooms := &mockRoomStoreWithMember{
+		isMemberFn: func(context.Context, int64, int64) (bool, error) {
+			return true, nil
+		},
+	}
+	messages := &mockMessageStore{
+		saveFn: func(_ context.Context, roomID, senderID int64, messageType, body string) (repository.MessageRecord, error) {
+			return repository.MessageRecord{
+				ID: 10, RoomID: roomID, SenderID: senderID, Type: messageType, Body: body, CreatedAt: time.Unix(1, 0),
+			}, nil
+		},
+	}
+	broadcaster := &mockBroadcaster{}
+
+	svc := NewMessageService(rooms, messages, broadcaster)
+	if _, err := svc.SendText(context.Background(), 1, 2, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if !broadcaster.called || broadcaster.roomID != 1 || broadcaster.item.Body != "hello" {
+		t.Fatalf("broadcast = %+v", broadcaster)
+	}
+}
+
+type mockBroadcaster struct {
+	called bool
+	roomID int64
+	item   MessageItem
+}
+
+func (m *mockBroadcaster) BroadcastMessage(roomID int64, item MessageItem) {
+	m.called = true
+	m.roomID = roomID
+	m.item = item
 }
 
 func TestMessageService_List(t *testing.T) {
@@ -107,7 +143,7 @@ func TestMessageService_List(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages)
+	svc := NewMessageService(rooms, messages, nil)
 	items, err := svc.List(context.Background(), 1, 2, 0, 0)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -123,7 +159,7 @@ func TestMessageService_List_NotMember(t *testing.T) {
 			return false, nil
 		},
 	}
-	svc := NewMessageService(rooms, &mockMessageStore{})
+	svc := NewMessageService(rooms, &mockMessageStore{}, nil)
 	_, err := svc.List(context.Background(), 1, 2, 0, 0)
 	if !errors.Is(err, ErrNotRoomMember) {
 		t.Fatalf("List() error = %v, want %v", err, ErrNotRoomMember)
@@ -144,7 +180,7 @@ func TestMessageService_List_DefaultLimit(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages)
+	svc := NewMessageService(rooms, messages, nil)
 	if _, err := svc.List(context.Background(), 1, 2, 0, 0); err != nil {
 		t.Fatal(err)
 	}
