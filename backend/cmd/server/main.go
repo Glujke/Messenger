@@ -31,7 +31,8 @@ func main() {
 	store := postgres.NewStore(database)
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
 	authHandler := handler.NewAuthHandler(authService, authService)
-	router := handler.NewRouter(logger, store, authHandler)
+	meHandler := handler.NewMeHandler()
+	router := handler.NewRouter(logger, store, authHandler, meHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

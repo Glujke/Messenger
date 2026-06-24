@@ -32,3 +32,23 @@ func IssueToken(userID int64, email, secret string, ttl time.Duration) (string, 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
+
+// ParseToken validates a JWT and returns its claims.
+func ParseToken(tokenString, secret string) (TokenClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &TokenClaims{}, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, ErrInvalidToken
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return TokenClaims{}, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*TokenClaims)
+	if !ok || !token.Valid {
+		return TokenClaims{}, ErrInvalidToken
+	}
+
+	return *claims, nil
+}
