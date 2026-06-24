@@ -1,0 +1,68 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+/build/
+
+# Go test / coverage
+*.test
+*.out
+coverage.*
+*.coverprofile
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency vendoring (if you add it later)
+vendor/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local config overrides
+*.local
+*.local.*
+
+# Uploads and runtime data
+uploads/
+data/
+tmp/
+temp/
+
+# Docker local volumes (if mounted into project folder)
+postgres_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Fyne / desktop build artifacts
+fyne_app_*
+*.app
+
+# Accidental manual module downloads
+*.zip
+
+# Debug
+__debug_bin*
+*.pdb
