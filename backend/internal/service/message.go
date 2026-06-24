@@ -9,7 +9,12 @@ import (
 	"messenger/backend/internal/repository"
 )
 
-var ErrNotRoomMember = errors.New("not a room member")
+var (
+	ErrNotRoomMember      = errors.New("not a room member")
+	ErrAttachmentNotFound = errors.New("attachment not found")
+	ErrAttachmentUsed     = errors.New("attachment already used")
+	ErrAttachmentMismatch = errors.New("attachment does not belong to room")
+)
 
 const (
 	defaultMessageLimit = 50
@@ -25,26 +30,42 @@ type MessageBroadcaster interface {
 type MessageService struct {
 	rooms       repository.RoomStore
 	messages    repository.MessageStore
+	attachments repository.AttachmentStore
 	broadcaster MessageBroadcaster
 }
 
 // NewMessageService creates a message service.
-func NewMessageService(rooms repository.RoomStore, messages repository.MessageStore, broadcaster MessageBroadcaster) *MessageService {
+func NewMessageService(
+	rooms repository.RoomStore,
+	messages repository.MessageStore,
+	attachments repository.AttachmentStore,
+	broadcaster MessageBroadcaster,
+) *MessageService {
 	return &MessageService{
 		rooms:       rooms,
 		messages:    messages,
+		attachments: attachments,
 		broadcaster: broadcaster,
 	}
 }
 
+// AttachmentItem describes a message attachment in API responses.
+type AttachmentItem struct {
+	ID          int64  `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
 // MessageItem is a message returned to clients.
 type MessageItem struct {
-	ID        int64  `json:"id"`
-	RoomID    int64  `json:"room_id"`
-	SenderID  int64  `json:"sender_id"`
-	Type      string `json:"type"`
-	Body      string `json:"body"`
-	CreatedAt string `json:"created_at"`
+	ID         int64           `json:"id"`
+	RoomID     int64           `json:"room_id"`
+	SenderID   int64           `json:"sender_id"`
+	Type       string          `json:"type"`
+	Body       string          `json:"body"`
+	Attachment *AttachmentItem `json:"attachment,omitempty"`
+	CreatedAt  string          `json:"created_at"`
 }
 
 // SendText stores a text message in a room.
@@ -54,6 +75,48 @@ func (s *MessageService) SendText(ctx context.Context, roomID, senderID int64, b
 	}
 	body = strings.TrimSpace(body)
 
+	return s.saveAndBroadcast(ctx, roomID, senderID, string(domain.MessageTypeText), body, nil)
+}
+
+// SendAttachment links an uploaded attachment to a new message.
+func (s *MessageService) SendAttachment(ctx context.Context, roomID, senderID, attachmentID int64, body string) (MessageItem, error) {
+	if err := domain.ValidateCaption(body); err != nil {
+		return MessageItem{}, err
+	}
+
+	attachment, err := s.attachments.FindAttachment(ctx, attachmentID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return MessageItem{}, ErrAttachmentNotFound
+	}
+	if err != nil {
+		return MessageItem{}, err
+	}
+	if attachment.RoomID != roomID {
+		return MessageItem{}, ErrAttachmentMismatch
+	}
+
+	used, err := s.attachments.IsAttachmentUsed(ctx, attachmentID)
+	if err != nil {
+		return MessageItem{}, err
+	}
+	if used {
+		return MessageItem{}, ErrAttachmentUsed
+	}
+
+	messageType, err := domain.MessageTypeForContentType(attachment.ContentType)
+	if err != nil {
+		return MessageItem{}, err
+	}
+
+	return s.saveAndBroadcast(ctx, roomID, senderID, string(messageType), body, &attachmentID)
+}
+
+func (s *MessageService) saveAndBroadcast(
+	ctx context.Context,
+	roomID, senderID int64,
+	messageType, body string,
+	attachmentID *int64,
+) (MessageItem, error) {
 	isMember, err := s.rooms.IsRoomMember(ctx, roomID, senderID)
 	if err != nil {
 		return MessageItem{}, err
@@ -62,7 +125,7 @@ func (s *MessageService) SendText(ctx context.Context, roomID, senderID int64, b
 		return MessageItem{}, ErrNotRoomMember
 	}
 
-	record, err := s.messages.SaveMessage(ctx, roomID, senderID, string(domain.MessageTypeText), body)
+	record, err := s.messages.SaveMessage(ctx, roomID, senderID, messageType, body, attachmentID)
 	if err != nil {
 		return MessageItem{}, err
 	}
@@ -104,7 +167,7 @@ func (s *MessageService) List(ctx context.Context, roomID, userID int64, limit i
 }
 
 func toMessageItem(record repository.MessageRecord) MessageItem {
-	return MessageItem{
+	item := MessageItem{
 		ID:        record.ID,
 		RoomID:    record.RoomID,
 		SenderID:  record.SenderID,
@@ -112,4 +175,13 @@ func toMessageItem(record repository.MessageRecord) MessageItem {
 		Body:      record.Body,
 		CreatedAt: record.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	}
+	if record.Attachment != nil {
+		item.Attachment = &AttachmentItem{
+			ID:          record.Attachment.ID,
+			Filename:    record.Attachment.Filename,
+			ContentType: record.Attachment.ContentType,
+			SizeBytes:   record.Attachment.SizeBytes,
+		}
+	}
+	return item
 }

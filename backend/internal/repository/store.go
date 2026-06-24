@@ -9,4 +9,5 @@ type Store interface {
 	UserStore
 	RoomStore
 	MessageStore
+	AttachmentStore
 }

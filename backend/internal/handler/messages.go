@@ -11,9 +11,10 @@ import (
 	"messenger/backend/internal/service"
 )
 
-// MessageSender stores a text message.
+// MessageSender stores messages in a room.
 type MessageSender interface {
 	SendText(ctx context.Context, roomID, senderID int64, body string) (service.MessageItem, error)
+	SendAttachment(ctx context.Context, roomID, senderID, attachmentID int64, body string) (service.MessageItem, error)
 }
 
 // MessageLister returns room messages.
@@ -36,7 +37,8 @@ func NewMessagesHandler(sender MessageSender, lister MessageLister) *MessagesHan
 }
 
 type sendMessageRequest struct {
-	Body string `json:"body"`
+	Body         string `json:"body"`
+	AttachmentID *int64 `json:"attachment_id"`
 }
 
 type messageListResponse struct {
@@ -74,8 +76,24 @@ func (h *MessagesHandler) serveSend(w http.ResponseWriter, r *http.Request, room
 		return
 	}
 
-	item, err := h.sender.SendText(r.Context(), roomID, caller.ID, req.Body)
+	var (
+		item service.MessageItem
+		err  error
+	)
+	if req.AttachmentID != nil {
+		item, err = h.sender.SendAttachment(r.Context(), roomID, caller.ID, *req.AttachmentID, req.Body)
+	} else {
+		item, err = h.sender.SendText(r.Context(), roomID, caller.ID, req.Body)
+	}
 	if errors.Is(err, domain.ErrEmptyMessageBody) || errors.Is(err, domain.ErrMessageTooLong) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	if errors.Is(err, service.ErrAttachmentNotFound) {
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "attachment not found"})
+		return
+	}
+	if errors.Is(err, service.ErrAttachmentUsed) || errors.Is(err, service.ErrAttachmentMismatch) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}

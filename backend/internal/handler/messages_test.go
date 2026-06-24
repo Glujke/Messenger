@@ -28,6 +28,20 @@ func (m *mockMessageSender) SendText(_ context.Context, _, _ int64, body string)
 	return m.item, nil
 }
 
+func (m *mockMessageSender) SendAttachment(_ context.Context, _, _ int64, attachmentID int64, body string) (service.MessageItem, error) {
+	if m.err != nil {
+		return service.MessageItem{}, m.err
+	}
+	item := m.item
+	if item.ID == 0 {
+		item.ID = 10
+	}
+	item.Body = body
+	item.Type = "image"
+	item.Attachment = &service.AttachmentItem{ID: attachmentID}
+	return item, nil
+}
+
 type mockMessageLister struct {
 	messages []service.MessageItem
 	err      error
@@ -60,6 +74,34 @@ func TestMessagesHandler_Send(t *testing.T) {
 		t.Fatal(err)
 	}
 	if item.ID != 10 || item.Body != "hello" {
+		t.Fatalf("item = %+v", item)
+	}
+}
+
+func TestMessagesHandler_SendAttachment(t *testing.T) {
+	attachmentID := int64(5)
+	h := NewMessagesHandler(
+		&mockMessageSender{item: service.MessageItem{ID: 11, RoomID: 1, Type: "image"}},
+		&mockMessageLister{},
+	)
+
+	body := `{"attachment_id":5,"body":"caption"}`
+	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
+	req.SetPathValue("id", "1")
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	var item service.MessageItem
+	if err := json.NewDecoder(rec.Body).Decode(&item); err != nil {
+		t.Fatal(err)
+	}
+	if item.Type != "image" || item.Attachment == nil || item.Attachment.ID != attachmentID {
 		t.Fatalf("item = %+v", item)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"messenger/backend/internal/config"
 	"messenger/backend/internal/handler"
 	"messenger/backend/internal/platform/db"
+	"messenger/backend/internal/platform/storage"
 	"messenger/backend/internal/repository/postgres"
 	"messenger/backend/internal/service"
 )
@@ -28,6 +29,12 @@ func main() {
 	}
 	defer database.Close()
 
+	fileStore, err := storage.NewDiskStore(cfg.UploadDir)
+	if err != nil {
+		logger.Error("upload storage initialization failed", "error", err)
+		os.Exit(1)
+	}
+
 	store := postgres.NewStore(database)
 	hub := service.NewHub()
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
@@ -35,10 +42,12 @@ func main() {
 	meHandler := handler.NewMeHandler()
 	roomService := service.NewRoomService(store, store)
 	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
-	messageService := service.NewMessageService(store, store, hub)
+	attachmentService := service.NewAttachmentService(store, store, fileStore, cfg.MaxUploadBytes)
+	attachmentsHandler := handler.NewAttachmentsHandler(attachmentService, attachmentService)
+	messageService := service.NewMessageService(store, store, store, hub)
 	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, store, logger)
-	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, wsHandler, cfg.JWTSecret)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,
