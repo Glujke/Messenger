@@ -12,7 +12,7 @@ import (
 
 func TestRequireAuth_ValidToken(t *testing.T) {
 	const secret = "test-secret"
-	token, err := service.IssueToken(7, "user@example.com", secret, time.Hour)
+	token, err := service.IssueToken(7, "user@example.com", "user", secret, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestRequireAuth_ValidToken(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if gotUser.ID != 7 || gotUser.Email != "user@example.com" {
+	if gotUser.ID != 7 || gotUser.Email != "user@example.com" || gotUser.Username != "user" {
 		t.Fatalf("user = %+v", gotUser)
 	}
 }
@@ -90,7 +90,7 @@ func TestRequireAuth_EmptyBearer(t *testing.T) {
 
 func TestRequireAuth_ContextPreserved(t *testing.T) {
 	const secret = "test-secret"
-	token, err := service.IssueToken(1, "user@example.com", secret, time.Hour)
+	token, err := service.IssueToken(1, "user@example.com", "user", secret, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -86,6 +86,10 @@ func (h *RoomsHandler) serveDirect(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "peer is not verified"})
 		return
 	}
+	if errors.Is(err, domain.ErrNotContact) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
+		return
+	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
 		return

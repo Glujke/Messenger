@@ -11,17 +11,19 @@ var ErrInvalidToken = errors.New("invalid token")
 
 // TokenClaims holds JWT payload for authenticated users.
 type TokenClaims struct {
-	UserID int64  `json:"uid"`
-	Email  string `json:"email"`
+	UserID   int64  `json:"uid"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
 
 // IssueToken creates a signed JWT for the given user.
-func IssueToken(userID int64, email, secret string, ttl time.Duration) (string, error) {
+func IssueToken(userID int64, email, username, secret string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := TokenClaims{
-		UserID: userID,
-		Email:  email,
+		UserID:   userID,
+		Email:    email,
+		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   email,
 			IssuedAt:  jwt.NewNumericDate(now),

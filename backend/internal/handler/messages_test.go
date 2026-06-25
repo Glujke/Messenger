@@ -60,7 +60,7 @@ func TestMessagesHandler_Send(t *testing.T) {
 	body := `{"body":"hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -88,7 +88,7 @@ func TestMessagesHandler_SendAttachment(t *testing.T) {
 	body := `{"attachment_id":5,"body":"caption"}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -115,7 +115,7 @@ func TestMessagesHandler_Send_NotMember(t *testing.T) {
 	body := `{"body":"hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -134,7 +134,7 @@ func TestMessagesHandler_Send_InvalidBody(t *testing.T) {
 	body := `{"body":"   "}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -156,7 +156,7 @@ func TestMessagesHandler_List(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms/1/messages", nil)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -179,7 +179,7 @@ func TestMessagesHandler_List_Empty(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms/1/messages", nil)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -202,7 +202,7 @@ func TestMessagesHandler_InvalidRoomID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms/bad/messages", nil)
 	req.SetPathValue("id", "bad")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -231,7 +231,7 @@ func TestMessagesHandler_List_InvalidQuery(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms/1/messages?limit=bad", nil)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -250,7 +250,7 @@ func TestMessagesHandler_Send_InternalError(t *testing.T) {
 	body := `{"body":"hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)

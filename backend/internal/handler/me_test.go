@@ -11,7 +11,7 @@ func TestMeHandler_Authenticated(t *testing.T) {
 	h := NewMeHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "test@local"}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "test@local", Username: "testuser"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -24,7 +24,7 @@ func TestMeHandler_Authenticated(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.ID != 1 || resp.Email != "test@local" {
+	if resp.ID != 1 || resp.Email != "test@local" || resp.Username != "testuser" {
 		t.Fatalf("response = %+v", resp)
 	}
 }
@@ -46,7 +46,7 @@ func TestMeHandler_WrongMethod(t *testing.T) {
 	h := NewMeHandler()
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/me", nil)
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "test@local"}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "test@local", Username: "test"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)

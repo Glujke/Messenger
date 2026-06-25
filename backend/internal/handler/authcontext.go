@@ -6,8 +6,9 @@ type authUserKey struct{}
 
 // AuthUser holds authenticated user data attached to a request context.
 type AuthUser struct {
-	ID    int64
-	Email string
+	ID       int64
+	Email    string
+	Username string
 }
 
 // WithAuthUser stores authenticated user data in the context.

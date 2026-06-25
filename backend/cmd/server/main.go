@@ -40,14 +40,16 @@ func main() {
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
 	authHandler := handler.NewAuthHandler(authService, authService)
 	meHandler := handler.NewMeHandler()
-	roomService := service.NewRoomService(store, store)
+	roomService := service.NewRoomService(store, store, store)
 	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
 	attachmentService := service.NewAttachmentService(store, store, fileStore, cfg.MaxUploadBytes)
 	attachmentsHandler := handler.NewAttachmentsHandler(attachmentService, attachmentService)
+	contactService := service.NewContactService(store, store)
+	contactsHandler := handler.NewContactsHandler(contactService)
 	messageService := service.NewMessageService(store, store, store, hub)
 	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, store, logger)
-	router := handler.NewRouter(logger, store, authHandler, meHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, contactsHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

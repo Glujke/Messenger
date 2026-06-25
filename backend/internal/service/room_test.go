@@ -35,11 +35,15 @@ type mockUserStoreWithID struct {
 	findByIDFn func(ctx context.Context, id int64) (repository.UserRecord, error)
 }
 
-func (m *mockUserStoreWithID) CreateUser(context.Context, string, string) (repository.UserRecord, error) {
+func (m *mockUserStoreWithID) CreateUser(context.Context, string, string, string) (repository.UserRecord, error) {
 	panic("not implemented")
 }
 
 func (m *mockUserStoreWithID) FindByEmail(context.Context, string) (repository.UserRecord, error) {
+	panic("not implemented")
+}
+
+func (m *mockUserStoreWithID) FindByUsername(context.Context, string) (repository.UserRecord, error) {
 	panic("not implemented")
 }
 
@@ -64,8 +68,11 @@ func TestRoomService_GetOrCreateDirect_Creates(t *testing.T) {
 			return 10, nil
 		},
 	}
+	contacts := &mockContactStore{
+		areContactsFn: func(int64, int64) (bool, error) { return true, nil },
+	}
 
-	svc := NewRoomService(users, rooms)
+	svc := NewRoomService(users, rooms, contacts)
 	result, created, err := svc.GetOrCreateDirect(context.Background(), 1, 2)
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() error = %v", err)
@@ -75,6 +82,23 @@ func TestRoomService_GetOrCreateDirect_Creates(t *testing.T) {
 	}
 	if result.ID != 10 || result.PeerID != 2 {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestRoomService_GetOrCreateDirect_NotContacts(t *testing.T) {
+	users := &mockUserStoreWithID{
+		findByIDFn: func(_ context.Context, id int64) (repository.UserRecord, error) {
+			return repository.UserRecord{ID: id, Verified: true}, nil
+		},
+	}
+	contacts := &mockContactStore{
+		areContactsFn: func(int64, int64) (bool, error) { return false, nil },
+	}
+
+	svc := NewRoomService(users, &mockRoomStore{}, contacts)
+	_, _, err := svc.GetOrCreateDirect(context.Background(), 1, 2)
+	if !errors.Is(err, domain.ErrNotContact) {
+		t.Fatalf("error = %v, want %v", err, domain.ErrNotContact)
 	}
 }
 
@@ -93,8 +117,11 @@ func TestRoomService_GetOrCreateDirect_Existing(t *testing.T) {
 			return 0, nil
 		},
 	}
+	contacts := &mockContactStore{
+		areContactsFn: func(int64, int64) (bool, error) { return true, nil },
+	}
 
-	svc := NewRoomService(users, rooms)
+	svc := NewRoomService(users, rooms, contacts)
 	result, created, err := svc.GetOrCreateDirect(context.Background(), 1, 2)
 	if err != nil {
 		t.Fatalf("GetOrCreateDirect() error = %v", err)
@@ -108,7 +135,7 @@ func TestRoomService_GetOrCreateDirect_Existing(t *testing.T) {
 }
 
 func TestRoomService_GetOrCreateDirect_SelfChat(t *testing.T) {
-	svc := NewRoomService(&mockUserStoreWithID{}, &mockRoomStore{})
+	svc := NewRoomService(&mockUserStoreWithID{}, &mockRoomStore{}, &mockContactStore{})
 	_, _, err := svc.GetOrCreateDirect(context.Background(), 1, 1)
 	if !errors.Is(err, domain.ErrSelfChat) {
 		t.Fatalf("error = %v, want %v", err, domain.ErrSelfChat)
@@ -121,7 +148,7 @@ func TestRoomService_GetOrCreateDirect_PeerNotFound(t *testing.T) {
 			return repository.UserRecord{}, repository.ErrNotFound
 		},
 	}
-	svc := NewRoomService(users, &mockRoomStore{})
+	svc := NewRoomService(users, &mockRoomStore{}, &mockContactStore{})
 	_, _, err := svc.GetOrCreateDirect(context.Background(), 1, 2)
 	if !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("error = %v, want %v", err, repository.ErrNotFound)
@@ -134,7 +161,7 @@ func TestRoomService_GetOrCreateDirect_PeerNotVerified(t *testing.T) {
 			return repository.UserRecord{ID: id, Verified: false}, nil
 		},
 	}
-	svc := NewRoomService(users, &mockRoomStore{})
+	svc := NewRoomService(users, &mockRoomStore{}, &mockContactStore{})
 	_, _, err := svc.GetOrCreateDirect(context.Background(), 1, 2)
 	if !errors.Is(err, ErrPeerNotVerified) {
 		t.Fatalf("error = %v, want %v", err, ErrPeerNotVerified)
@@ -153,7 +180,7 @@ func TestRoomService_ListRooms(t *testing.T) {
 		},
 	}
 
-	svc := NewRoomService(&mockUserStoreWithID{}, rooms)
+	svc := NewRoomService(&mockUserStoreWithID{}, rooms, &mockContactStore{})
 	items, err := svc.ListRooms(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListRooms() error = %v", err)

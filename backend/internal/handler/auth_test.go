@@ -19,12 +19,15 @@ type mockAuthRegistrar struct {
 	err    error
 }
 
-func (m *mockAuthRegistrar) Register(_ context.Context, email, password string) (service.RegisterResult, error) {
+func (m *mockAuthRegistrar) Register(_ context.Context, email, username, password string) (service.RegisterResult, error) {
 	if m.err != nil {
 		return service.RegisterResult{}, m.err
 	}
 	if m.result.Email == "" {
 		m.result.Email = email
+	}
+	if m.result.Username == "" {
+		m.result.Username = username
 	}
 	return m.result, nil
 }
@@ -40,11 +43,11 @@ func (m *mockAuthAuthenticator) Login(context.Context, string, string) (string, 
 
 func TestAuthHandler_Register(t *testing.T) {
 	h := NewAuthHandler(
-		&mockAuthRegistrar{result: service.RegisterResult{ID: 1, Email: "user@example.com"}},
+		&mockAuthRegistrar{result: service.RegisterResult{ID: 1, Email: "user@example.com", Username: "user"}},
 		&mockAuthAuthenticator{},
 	)
 
-	body := `{"email":"user@example.com","password":"secret123"}`
+	body := `{"email":"user@example.com","username":"user","password":"secret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -58,7 +61,7 @@ func TestAuthHandler_Register(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.ID != 1 || resp.Email != "user@example.com" {
+	if resp.ID != 1 || resp.Email != "user@example.com" || resp.Username != "user" {
 		t.Fatalf("response = %+v", resp)
 	}
 }
@@ -99,7 +102,24 @@ func TestAuthHandler_Register_EmailTaken(t *testing.T) {
 		&mockAuthAuthenticator{},
 	)
 
-	body := `{"email":"user@example.com","password":"secret123"}`
+	body := `{"email":"user@example.com","username":"user","password":"secret123"}`
+	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestAuthHandler_Register_UsernameTaken(t *testing.T) {
+	h := NewAuthHandler(
+		&mockAuthRegistrar{err: repository.ErrUsernameTaken},
+		&mockAuthAuthenticator{},
+	)
+
+	body := `{"email":"user@example.com","username":"user","password":"secret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 

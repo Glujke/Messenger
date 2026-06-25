@@ -13,16 +13,20 @@ import (
 )
 
 type mockUserStore struct {
-	createFn func(ctx context.Context, email, passwordHash string) (repository.UserRecord, error)
+	createFn func(ctx context.Context, email, username, passwordHash string) (repository.UserRecord, error)
 	findFn   func(ctx context.Context, email string) (repository.UserRecord, error)
 }
 
-func (m *mockUserStore) CreateUser(ctx context.Context, email, passwordHash string) (repository.UserRecord, error) {
-	return m.createFn(ctx, email, passwordHash)
+func (m *mockUserStore) CreateUser(ctx context.Context, email, username, passwordHash string) (repository.UserRecord, error) {
+	return m.createFn(ctx, email, username, passwordHash)
 }
 
 func (m *mockUserStore) FindByEmail(ctx context.Context, email string) (repository.UserRecord, error) {
 	return m.findFn(ctx, email)
+}
+
+func (m *mockUserStore) FindByUsername(ctx context.Context, username string) (repository.UserRecord, error) {
+	return repository.UserRecord{}, repository.ErrNotFound
 }
 
 func (m *mockUserStore) FindByID(context.Context, int64) (repository.UserRecord, error) {
@@ -31,46 +35,71 @@ func (m *mockUserStore) FindByID(context.Context, int64) (repository.UserRecord,
 
 func TestAuthService_Register(t *testing.T) {
 	store := &mockUserStore{
-		createFn: func(_ context.Context, email, passwordHash string) (repository.UserRecord, error) {
+		createFn: func(_ context.Context, email, username, passwordHash string) (repository.UserRecord, error) {
 			if email != "user@example.com" {
 				t.Fatalf("email = %q, want user@example.com", email)
+			}
+			if username != "user" {
+				t.Fatalf("username = %q, want user", username)
 			}
 			if passwordHash == "" {
 				t.Fatal("passwordHash is empty")
 			}
-			return repository.UserRecord{ID: 1, Email: email}, nil
+			return repository.UserRecord{ID: 1, Email: email, Username: username}, nil
 		},
 	}
 
 	svc := NewAuthService(store, "secret", time.Hour)
-	result, err := svc.Register(context.Background(), "user@example.com", "secret123")
+	result, err := svc.Register(context.Background(), "user@example.com", "user", "secret123")
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	if result.ID != 1 || result.Email != "user@example.com" {
-		t.Fatalf("result = %+v, want id=1 email=user@example.com", result)
+	if result.ID != 1 || result.Email != "user@example.com" || result.Username != "user" {
+		t.Fatalf("result = %+v, want id=1 email=user@example.com username=user", result)
 	}
 }
 
 func TestAuthService_Register_InvalidEmail(t *testing.T) {
 	svc := NewAuthService(&mockUserStore{}, "secret", time.Hour)
-	_, err := svc.Register(context.Background(), "bad-email", "secret123")
+	_, err := svc.Register(context.Background(), "bad-email", "user", "secret123")
 	if !errors.Is(err, domain.ErrInvalidEmail) {
 		t.Fatalf("Register() error = %v, want %v", err, domain.ErrInvalidEmail)
 	}
 }
 
+func TestAuthService_Register_InvalidUsername(t *testing.T) {
+	svc := NewAuthService(&mockUserStore{}, "secret", time.Hour)
+	_, err := svc.Register(context.Background(), "user@example.com", "u", "secret123")
+	if !errors.Is(err, domain.ErrInvalidUsername) {
+		t.Fatalf("Register() error = %v, want %v", err, domain.ErrInvalidUsername)
+	}
+}
+
 func TestAuthService_Register_EmailTaken(t *testing.T) {
 	store := &mockUserStore{
-		createFn: func(context.Context, string, string) (repository.UserRecord, error) {
+		createFn: func(context.Context, string, string, string) (repository.UserRecord, error) {
 			return repository.UserRecord{}, repository.ErrEmailTaken
 		},
 	}
 
 	svc := NewAuthService(store, "secret", time.Hour)
-	_, err := svc.Register(context.Background(), "user@example.com", "secret123")
+	_, err := svc.Register(context.Background(), "user@example.com", "user", "secret123")
 	if !errors.Is(err, repository.ErrEmailTaken) {
 		t.Fatalf("Register() error = %v, want %v", err, repository.ErrEmailTaken)
+	}
+}
+
+func TestAuthService_Register_UsernameTaken(t *testing.T) {
+	store := &mockUserStore{
+		createFn: func(context.Context, string, string, string) (repository.UserRecord, error) {
+			return repository.UserRecord{}, repository.ErrUsernameTaken
+		},
+	}
+
+	svc := NewAuthService(store, "secret", time.Hour)
+	_, err := svc.Register(context.Background(), "user@example.com", "user", "secret123")
+	if !errors.Is(err, repository.ErrUsernameTaken) {
+		t.Fatalf("Register() error = %v, want %v", err, repository.ErrUsernameTaken)
 	}
 }
 
@@ -85,6 +114,7 @@ func TestAuthService_Login(t *testing.T) {
 			return repository.UserRecord{
 				ID:           1,
 				Email:        email,
+				Username:     "user",
 				PasswordHash: string(hash),
 				Verified:     true,
 			}, nil
@@ -112,6 +142,7 @@ func TestAuthService_Login_NotVerified(t *testing.T) {
 			return repository.UserRecord{
 				ID:           1,
 				Email:        email,
+				Username:     "user",
 				PasswordHash: string(hash),
 				Verified:     false,
 			}, nil
@@ -136,6 +167,7 @@ func TestAuthService_Login_InvalidCredentials(t *testing.T) {
 			return repository.UserRecord{
 				ID:           1,
 				Email:        email,
+				Username:     "user",
 				PasswordHash: string(hash),
 				Verified:     true,
 			}, nil

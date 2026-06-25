@@ -37,7 +37,7 @@ func TestAttachmentsHandler_ServeUpload(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/attachments", body)
 	req.Header.Set("Content-Type", contentType)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{result: service.UploadResult{ID: 5, Filename: "photo.png", MessageType: "image"}},
@@ -57,7 +57,7 @@ func TestAttachmentsHandler_ServeUpload_NotMember(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/attachments", body)
 	req.Header.Set("Content-Type", contentType)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{err: service.ErrNotRoomMember},
@@ -75,7 +75,7 @@ func TestAttachmentsHandler_ServeUpload_NotMember(t *testing.T) {
 func TestAttachmentsHandler_ServeDownload(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/attachments/5", nil)
 	req.SetPathValue("id", "5")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{},
@@ -103,7 +103,7 @@ func TestAttachmentsHandler_ServeDownload(t *testing.T) {
 func TestAttachmentsHandler_ServeDownload_NotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/attachments/5", nil)
 	req.SetPathValue("id", "5")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{},
@@ -141,7 +141,7 @@ func TestAttachmentsHandler_ServeUpload_MissingFile(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/attachments", bytes.NewBufferString(""))
 	req.Header.Set("Content-Type", "multipart/form-data; boundary=bad")
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(&mockAttachmentUploader{}, &mockAttachmentDownloader{})
 	rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestAttachmentsHandler_ServeUpload_TooLarge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/rooms/1/attachments", body)
 	req.Header.Set("Content-Type", contentType)
 	req.SetPathValue("id", "1")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{err: domain.ErrUploadTooLarge},
@@ -190,7 +190,7 @@ func TestAttachmentsHandler_ServeDownload_Unauthorized(t *testing.T) {
 func TestAttachmentsHandler_ServeDownload_InternalError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/attachments/5", nil)
 	req.SetPathValue("id", "5")
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
 
 	h := NewAttachmentsHandler(
 		&mockAttachmentUploader{},

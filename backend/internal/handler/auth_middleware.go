@@ -24,8 +24,9 @@ func RequireAuth(jwtSecret string, next http.Handler) http.Handler {
 		}
 
 		user := AuthUser{
-			ID:    claims.UserID,
-			Email: claims.Email,
+			ID:       claims.UserID,
+			Email:    claims.Email,
+			Username: claims.Username,
 		}
 		next.ServeHTTP(w, r.WithContext(WithAuthUser(r.Context(), user)))
 	})

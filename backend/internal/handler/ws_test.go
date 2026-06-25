@@ -41,7 +41,7 @@ func TestWSHandler_InvalidToken(t *testing.T) {
 
 func TestWSHandler_ValidTokenUpgrades(t *testing.T) {
 	const secret = "secret"
-	token, err := service.IssueToken(1, "user@example.com", secret, time.Hour)
+	token, err := service.IssueToken(1, "user@example.com", "user", secret, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

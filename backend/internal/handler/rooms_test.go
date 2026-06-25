@@ -50,7 +50,7 @@ func TestRoomsHandler_CreateDirect(t *testing.T) {
 
 	body := `{"user_id":2}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/direct", bytes.NewBufferString(body))
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "a@b.c"}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -79,7 +79,7 @@ func TestRoomsHandler_ExistingDirect(t *testing.T) {
 
 	body := `{"user_id":2}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/direct", bytes.NewBufferString(body))
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -97,7 +97,7 @@ func TestRoomsHandler_DirectSelfChat(t *testing.T) {
 
 	body := `{"user_id":1}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/direct", bytes.NewBufferString(body))
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -115,7 +115,7 @@ func TestRoomsHandler_DirectPeerNotFound(t *testing.T) {
 
 	body := `{"user_id":2}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/direct", bytes.NewBufferString(body))
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -133,7 +133,7 @@ func TestRoomsHandler_DirectPeerNotVerified(t *testing.T) {
 
 	body := `{"user_id":2}`
 	req := httptest.NewRequest(http.MethodPost, "/rooms/direct", bytes.NewBufferString(body))
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -154,7 +154,7 @@ func TestRoomsHandler_ListRooms(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -176,7 +176,7 @@ func TestRoomsHandler_ListRooms_Empty(t *testing.T) {
 	h := NewRoomsHandler(&mockDirectRoomOpener{}, &mockRoomLister{})
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)
@@ -214,7 +214,7 @@ func TestRoomsHandler_ListRooms_InternalError(t *testing.T) {
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
-	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1}))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, req)

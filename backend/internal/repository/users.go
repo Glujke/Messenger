@@ -7,14 +7,16 @@ import (
 )
 
 var (
-	ErrEmailTaken = errors.New("email already taken")
-	ErrNotFound   = errors.New("user not found")
+	ErrEmailTaken    = errors.New("email already taken")
+	ErrUsernameTaken = errors.New("username already taken")
+	ErrNotFound      = errors.New("user not found")
 )
 
 // UserRecord is a persisted user with credentials metadata.
 type UserRecord struct {
 	ID           int64
 	Email        string
+	Username     string
 	PasswordHash string
 	Verified     bool
 	CreatedAt    time.Time
@@ -22,7 +24,8 @@ type UserRecord struct {
 
 // UserStore defines user persistence operations.
 type UserStore interface {
-	CreateUser(ctx context.Context, email, passwordHash string) (UserRecord, error)
+	CreateUser(ctx context.Context, email, username, passwordHash string) (UserRecord, error)
 	FindByEmail(ctx context.Context, email string) (UserRecord, error)
+	FindByUsername(ctx context.Context, username string) (UserRecord, error)
 	FindByID(ctx context.Context, id int64) (UserRecord, error)
 }

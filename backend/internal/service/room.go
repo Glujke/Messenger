@@ -12,15 +12,17 @@ var ErrPeerNotVerified = errors.New("peer is not verified")
 
 // RoomService handles direct room use cases.
 type RoomService struct {
-	users repository.UserStore
-	rooms repository.RoomStore
+	users    repository.UserStore
+	rooms    repository.RoomStore
+	contacts repository.ContactStore
 }
 
 // NewRoomService creates a room service.
-func NewRoomService(users repository.UserStore, rooms repository.RoomStore) *RoomService {
+func NewRoomService(users repository.UserStore, rooms repository.RoomStore, contacts repository.ContactStore) *RoomService {
 	return &RoomService{
-		users: users,
-		rooms: rooms,
+		users:    users,
+		rooms:    rooms,
+		contacts: contacts,
 	}
 }
 
@@ -52,6 +54,15 @@ func (s *RoomService) GetOrCreateDirect(ctx context.Context, callerID, peerID in
 	}
 	if !peer.Verified {
 		return DirectRoomResult{}, false, ErrPeerNotVerified
+	}
+
+	// Check if users are contacts before allowing direct chat
+	areContacts, err := s.contacts.AreContacts(ctx, callerID, peerID)
+	if err != nil {
+		return DirectRoomResult{}, false, err
+	}
+	if !areContacts {
+		return DirectRoomResult{}, false, domain.ErrNotContact
 	}
 
 	roomID, found, err := s.rooms.FindDirectRoom(ctx, callerID, peerID)

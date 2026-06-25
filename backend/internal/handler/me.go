@@ -11,8 +11,9 @@ func NewMeHandler() *MeHandler {
 }
 
 type meResponse struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
+	ID       int64  `json:"id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
 }
 
 // ServeHTTP implements http.Handler.
@@ -29,7 +30,8 @@ func (h *MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, meResponse{
-		ID:    user.ID,
-		Email: user.Email,
+		ID:       user.ID,
+		Email:    user.Email,
+		Username: user.Username,
 	})
 }

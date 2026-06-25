@@ -12,17 +12,18 @@ import (
 )
 
 // CreateUser inserts a new user and returns the persisted record.
-func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (repository.UserRecord, error) {
+func (s *Store) CreateUser(ctx context.Context, email, username, passwordHash string) (repository.UserRecord, error) {
 	const query = `
-		INSERT INTO users (email, password_hash)
-		VALUES ($1, $2)
-		RETURNING id, email, password_hash, verified, created_at
+		INSERT INTO users (email, username, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id, email, username, password_hash, verified, created_at
 	`
 
 	var record repository.UserRecord
-	err := s.db.QueryRowContext(ctx, query, strings.ToLower(email), passwordHash).Scan(
+	err := s.db.QueryRowContext(ctx, query, strings.ToLower(email), strings.ToLower(username), passwordHash).Scan(
 		&record.ID,
 		&record.Email,
+		&record.Username,
 		&record.PasswordHash,
 		&record.Verified,
 		&record.CreatedAt,
@@ -30,6 +31,9 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (rep
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if strings.Contains(pgErr.ConstraintName, "username") {
+				return repository.UserRecord{}, repository.ErrUsernameTaken
+			}
 			return repository.UserRecord{}, repository.ErrEmailTaken
 		}
 		return repository.UserRecord{}, err
@@ -41,7 +45,7 @@ func (s *Store) CreateUser(ctx context.Context, email, passwordHash string) (rep
 // FindByEmail loads a user by email address.
 func (s *Store) FindByEmail(ctx context.Context, email string) (repository.UserRecord, error) {
 	const query = `
-		SELECT id, email, password_hash, verified, created_at
+		SELECT id, email, username, password_hash, verified, created_at
 		FROM users
 		WHERE email = $1
 	`
@@ -50,6 +54,34 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (repository.UserR
 	err := s.db.QueryRowContext(ctx, query, strings.ToLower(email)).Scan(
 		&record.ID,
 		&record.Email,
+		&record.Username,
+		&record.PasswordHash,
+		&record.Verified,
+		&record.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return repository.UserRecord{}, repository.ErrNotFound
+	}
+	if err != nil {
+		return repository.UserRecord{}, err
+	}
+
+	return record, nil
+}
+
+// FindByUsername loads a user by username.
+func (s *Store) FindByUsername(ctx context.Context, username string) (repository.UserRecord, error) {
+	const query = `
+		SELECT id, email, username, password_hash, verified, created_at
+		FROM users
+		WHERE username = $1
+	`
+
+	var record repository.UserRecord
+	err := s.db.QueryRowContext(ctx, query, strings.ToLower(username)).Scan(
+		&record.ID,
+		&record.Email,
+		&record.Username,
 		&record.PasswordHash,
 		&record.Verified,
 		&record.CreatedAt,
@@ -67,7 +99,7 @@ func (s *Store) FindByEmail(ctx context.Context, email string) (repository.UserR
 // FindByID loads a user by primary key.
 func (s *Store) FindByID(ctx context.Context, id int64) (repository.UserRecord, error) {
 	const query = `
-		SELECT id, email, password_hash, verified, created_at
+		SELECT id, email, username, password_hash, verified, created_at
 		FROM users
 		WHERE id = $1
 	`
@@ -76,6 +108,7 @@ func (s *Store) FindByID(ctx context.Context, id int64) (repository.UserRecord, 
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&record.ID,
 		&record.Email,
+		&record.Username,
 		&record.PasswordHash,
 		&record.Verified,
 		&record.CreatedAt,

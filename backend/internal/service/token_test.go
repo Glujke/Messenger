@@ -9,7 +9,7 @@ import (
 func TestParseToken_Valid(t *testing.T) {
 	const secret = "test-secret"
 
-	token, err := IssueToken(42, "user@example.com", secret, time.Hour)
+	token, err := IssueToken(42, "user@example.com", "user", secret, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,10 +24,13 @@ func TestParseToken_Valid(t *testing.T) {
 	if claims.Email != "user@example.com" {
 		t.Fatalf("Email = %q, want user@example.com", claims.Email)
 	}
+	if claims.Username != "user" {
+		t.Fatalf("Username = %q, want user", claims.Username)
+	}
 }
 
 func TestParseToken_WrongSecret(t *testing.T) {
-	token, err := IssueToken(1, "user@example.com", "secret-a", time.Hour)
+	token, err := IssueToken(1, "user@example.com", "user", "secret-a", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +42,7 @@ func TestParseToken_WrongSecret(t *testing.T) {
 }
 
 func TestParseToken_Expired(t *testing.T) {
-	token, err := IssueToken(1, "user@example.com", "secret", -time.Hour)
+	token, err := IssueToken(1, "user@example.com", "user", "secret", -time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

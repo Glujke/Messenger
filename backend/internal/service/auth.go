@@ -35,13 +35,17 @@ func NewAuthService(users repository.UserStore, jwtSecret string, jwtTTL time.Du
 
 // RegisterResult is returned after successful registration.
 type RegisterResult struct {
-	ID    int64
-	Email string
+	ID       int64
+	Email    string
+	Username string
 }
 
 // Register creates a new unverified user account.
-func (s *AuthService) Register(ctx context.Context, email, password string) (RegisterResult, error) {
+func (s *AuthService) Register(ctx context.Context, email, username, password string) (RegisterResult, error) {
 	if err := domain.ValidateEmail(email); err != nil {
+		return RegisterResult{}, err
+	}
+	if err := domain.ValidateUsername(username); err != nil {
 		return RegisterResult{}, err
 	}
 	if err := domain.ValidatePassword(password); err != nil {
@@ -53,14 +57,15 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Reg
 		return RegisterResult{}, err
 	}
 
-	record, err := s.users.CreateUser(ctx, strings.ToLower(strings.TrimSpace(email)), string(hash))
+	record, err := s.users.CreateUser(ctx, strings.ToLower(strings.TrimSpace(email)), strings.ToLower(strings.TrimSpace(username)), string(hash))
 	if err != nil {
 		return RegisterResult{}, err
 	}
 
 	return RegisterResult{
-		ID:    record.ID,
-		Email: record.Email,
+		ID:       record.ID,
+		Email:    record.Email,
+		Username: record.Username,
 	}, nil
 }
 
@@ -88,5 +93,5 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", ErrNotVerified
 	}
 
-	return IssueToken(record.ID, record.Email, s.jwtSecret, s.jwtTTL)
+	return IssueToken(record.ID, record.Email, record.Username, s.jwtSecret, s.jwtTTL)
 }

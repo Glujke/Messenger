@@ -6,6 +6,7 @@ import "time"
 type User struct {
 	ID        int64
 	Email     string
+	Username  string
 	Verified  bool
 	CreatedAt time.Time
 }
