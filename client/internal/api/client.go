@@ -109,6 +109,33 @@ type Room struct {
 	PeerEmail string `json:"peer_email,omitempty"`
 }
 
+// Message represents a chat message in the API.
+type Message struct {
+	ID        int64  `json:"id"`
+	RoomID    int64  `json:"room_id"`
+	SenderID  int64  `json:"sender_id"`
+	Type      string `json:"type"`
+	Body      string `json:"body"`
+	CreatedAt string `json:"created_at"`
+}
+
+// ContactRequest represents a contact invitation (incoming or outgoing).
+type ContactRequest struct {
+	ID          int64  `json:"id"`
+	FromUserID  int64  `json:"from_user_id"`
+	ToUserID    int64  `json:"to_user_id"`
+	Status      string `json:"status"` // pending, accepted, rejected
+	CreatedAt   string `json:"created_at"`
+	RespondedAt string `json:"responded_at,omitempty"`
+}
+
+// Contact represents a confirmed friend.
+type Contact struct {
+	ID       int64  `json:"id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+}
+
 // GetRooms returns the list of rooms for the authenticated user.
 func (c *Client) GetRooms(ctx context.Context, token string) ([]Room, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/rooms", nil)
@@ -140,6 +167,240 @@ func (c *Client) GetRooms(ctx context.Context, token string) ([]Room, error) {
 	}
 
 	return result.Rooms, nil
+}
+
+// GetMessages returns the history of messages for a room.
+func (c *Client) GetMessages(ctx context.Context, token string, roomID int64) ([]Message, error) {
+	url := fmt.Sprintf("%s/rooms/%d/messages", c.baseURL, roomID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("failed to get messages: %s", resp.Status)
+	}
+
+	var result struct {
+		Messages []Message `json:"messages"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Messages, nil
+}
+
+// SendMessage sends a new text message to a room.
+func (c *Client) SendMessage(ctx context.Context, token string, roomID int64, body string) (Message, error) {
+	url := fmt.Sprintf("%s/rooms/%d/messages", c.baseURL, roomID)
+	reqBody, _ := json.Marshal(map[string]string{
+		"body": body,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return Message{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return Message{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return Message{}, fmt.Errorf("%s", errResp.Error)
+		}
+		return Message{}, fmt.Errorf("failed to send message: %s", resp.Status)
+	}
+
+	var msg Message
+	if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
+		return Message{}, err
+	}
+
+	return msg, nil
+}
+
+// InviteContact sends a contact invitation to another user.
+func (c *Client) InviteContact(ctx context.Context, token, emailOrUsername string) error {
+	body, _ := json.Marshal(map[string]string{
+		"identifier": emailOrUsername,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/contacts/invite", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("failed to invite contact: %s", resp.Status)
+	}
+
+	return nil
+}
+
+// GetContactRequests returns pending contact invitations.
+func (c *Client) GetContactRequests(ctx context.Context, token string) ([]ContactRequest, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/contacts/requests", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("failed to get contact requests: %s", resp.Status)
+	}
+
+	var result struct {
+		Requests []ContactRequest `json:"requests"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Requests, nil
+}
+
+// AcceptContact accepts a contact invitation.
+func (c *Client) AcceptContact(ctx context.Context, token string, requestID int64) error {
+	url := fmt.Sprintf("%s/contacts/requests/%d/accept", c.baseURL, requestID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("failed to accept contact: %s", resp.Status)
+	}
+
+	return nil
+}
+
+// ListContacts returns the list of confirmed contacts.
+func (c *Client) ListContacts(ctx context.Context, token string) ([]Contact, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/contacts", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("failed to list contacts: %s", resp.Status)
+	}
+
+	var result struct {
+		Contacts []Contact `json:"contacts"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Contacts, nil
+}
+
+// CreateGroup creates a new group room.
+func (c *Client) CreateGroup(ctx context.Context, token, name string, userIDs []int64) (int64, error) {
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":     name,
+		"user_ids": userIDs,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/rooms/group", bytes.NewBuffer(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return 0, fmt.Errorf("%s", errResp.Error)
+		}
+		return 0, fmt.Errorf("failed to create group: %s", resp.Status)
+	}
+
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+
+	return result.ID, nil
 }
 
 // Health checks whether the backend is reachable.

@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"context"
 	"messenger/client/internal/state"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -49,12 +52,36 @@ func (s *Sidebar) setupList() {
 	s.list.OnSelected = func(id widget.ListItemID) {
 		room := s.state.Rooms[id]
 		s.state.ActiveRoomID = room.ID
-		// TODO: Trigger chat area update
+		
+		go func() {
+			// Subscribe via WS if connected
+			if s.state.WS != nil {
+				_ = s.state.WS.Subscribe(room.ID)
+			}
+
+			messages, err := s.state.API.GetMessages(context.Background(), s.state.Token, room.ID)
+			if err != nil {
+				dialog.ShowError(err, s.state.Window)
+				return
+			}
+			s.state.SetMessages(messages)
+		}()
 	}
 }
 
 // Content returns the sidebar layout.
 func (s *Sidebar) Content() fyne.CanvasObject {
 	title := widget.NewLabelWithStyle("Chats", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	return container.NewBorder(container.NewPadded(title), nil, nil, nil, s.list)
+	
+	contactsBtn := widget.NewButtonWithIcon("", theme.AccountIcon(), func() {
+		ShowContactsDialog(s.state)
+	})
+	
+	addGroupBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		ShowCreateGroupDialog(s.state)
+	})
+	
+	header := container.NewBorder(nil, nil, nil, container.NewHBox(addGroupBtn, contactsBtn), container.NewPadded(title))
+	
+	return container.NewBorder(header, nil, nil, nil, s.list)
 }

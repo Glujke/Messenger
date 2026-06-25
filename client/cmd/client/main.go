@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"log"
+	"messenger/client/internal/api"
+	"messenger/client/internal/config"
 	"messenger/client/internal/state"
 	"messenger/client/internal/ui"
 
@@ -11,6 +14,7 @@ import (
 )
 
 func main() {
+	cfg := config.Default()
 	a := app.New()
 	w := a.NewWindow("Messenger")
 	w.Resize(fyne.NewSize(400, 500))
@@ -19,9 +23,7 @@ func main() {
 	// Set minimum size to prevent UI breaking
 	w.SetPadded(true)
 
-	// For now, hardcoded local backend URL
-	apiURL := "http://localhost:8080"
-	s := state.New(a, w, apiURL)
+	s := state.New(a, w, cfg.ServerURL, cfg.EncryptionKey)
 
 	// Define what happens after login
 	s.OnLogin = func() {
@@ -34,7 +36,30 @@ func main() {
 			}
 			s.SetRooms(rooms)
 
-			// 2. Switch to main screen
+			// 2. Initialize WebSocket
+			ws, err := api.Dial(cfg.ServerURL, s.Token)
+			if err != nil {
+				log.Printf("WebSocket connection failed: %v", err)
+			} else {
+				s.WS = ws
+				go func() {
+					for {
+						event, err := ws.ReadEvent()
+						if err != nil {
+							log.Printf("WS read error: %v", err)
+							return
+						}
+						if event.Type == api.ServerEventNewMessage {
+							// Only add if it's for the active room (or we can handle background updates later)
+							if event.Message.RoomID == s.ActiveRoomID {
+								s.AddMessage(event.Message)
+							}
+						}
+					}
+				}()
+			}
+
+			// 3. Switch to main screen
 			mainScreen := ui.NewMainScreen(s)
 			w.SetContent(mainScreen.Content())
 			w.Resize(fyne.NewSize(900, 600))

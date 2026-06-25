@@ -2,7 +2,10 @@ module messenger/client
 
 go 1.26
 
-require fyne.io/fyne/v2 v2.6.1
+require (
+	fyne.io/fyne/v2 v2.6.1
+	github.com/gorilla/websocket v1.5.3
+)
 
 require (
 	fyne.io/systray v1.11.0 // indirect
