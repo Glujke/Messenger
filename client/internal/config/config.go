@@ -8,6 +8,6 @@ type Config struct {
 // Default returns the initial client configuration.
 func Default() Config {
 	return Config{
-		ServerURL: "http://localhost:8080",
+		ServerURL: "http://ITC05:8080",
 	}
 }
