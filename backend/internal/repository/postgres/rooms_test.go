@@ -74,7 +74,7 @@ func TestStore_CreateDirectRoom(t *testing.T) {
 	store := NewStore(db)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO rooms`).
+	mock.ExpectQuery(`INSERT INTO rooms \(kind\)` + " VALUES \\('direct'\\)").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(5)))
 	mock.ExpectExec(`INSERT INTO room_members`).
 		WithArgs(int64(5), int64(1)).
@@ -105,10 +105,10 @@ func TestStore_ListUserRooms(t *testing.T) {
 
 	store := NewStore(db)
 
-	mock.ExpectQuery(`SELECT r.id, u.id, u.email`).
+	mock.ExpectQuery(`SELECT r.id, r.kind, r.name, COALESCE\(u.id, 0\), COALESCE\(u.email, ''\)`).
 		WithArgs(int64(1)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "email"}).
-			AddRow(int64(10), int64(2), "peer@example.com"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "kind", "name", "peer_id", "peer_email"}).
+			AddRow(int64(10), "direct", nil, int64(2), "peer@example.com"))
 
 	rooms, err := store.ListUserRooms(context.Background(), 1)
 	if err != nil {
@@ -117,10 +117,43 @@ func TestStore_ListUserRooms(t *testing.T) {
 	if len(rooms) != 1 {
 		t.Fatalf("len(rooms) = %d, want 1", len(rooms))
 	}
-	if rooms[0].ID != 10 || rooms[0].PeerID != 2 || rooms[0].PeerEmail != "peer@example.com" {
+	if rooms[0].ID != 10 || rooms[0].PeerID != 2 || rooms[0].PeerEmail != "peer@example.com" || rooms[0].Kind != "direct" {
 		t.Fatalf("rooms[0] = %+v", rooms[0])
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStore_CreateGroupRoom(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO rooms \(kind, name, created_by\)` + " VALUES \\('group', \\$1, \\$2\\)").
+		WithArgs("Test Group", int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(100)))
+	mock.ExpectExec(`INSERT INTO room_members`).
+		WithArgs(int64(100), int64(1)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`INSERT INTO room_members`).
+		WithArgs(int64(100), int64(2)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(`INSERT INTO room_members`).
+		WithArgs(int64(100), int64(3)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	roomID, err := store.CreateGroupRoom(context.Background(), "Test Group", 1, []int64{2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roomID != 100 {
+		t.Fatalf("roomID = %d", roomID)
 	}
 }

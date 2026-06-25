@@ -39,6 +39,10 @@ func (m *mockRoomStoreWithMember) ListUserRooms(context.Context, int64) ([]repos
 	panic("not implemented")
 }
 
+func (m *mockRoomStoreWithMember) CreateGroupRoom(context.Context, string, int64, []int64) (int64, error) {
+	panic("not implemented")
+}
+
 func (m *mockRoomStoreWithMember) IsRoomMember(ctx context.Context, roomID, userID int64) (bool, error) {
 	return m.isMemberFn(ctx, roomID, userID)
 }

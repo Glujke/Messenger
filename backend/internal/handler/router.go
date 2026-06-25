@@ -35,6 +35,7 @@ func NewRouter(
 	mux.Handle("POST /contacts/requests/", RequireAuth(jwtSecret, contacts))
 	mux.Handle("GET /contacts", RequireAuth(jwtSecret, contacts))
 	mux.Handle("POST /rooms/direct", RequireAuth(jwtSecret, rooms))
+	mux.Handle("POST /rooms/group", RequireAuth(jwtSecret, rooms))
 	mux.Handle("GET /rooms", RequireAuth(jwtSecret, rooms))
 	mux.Handle("POST /rooms/{id}/messages", RequireAuth(jwtSecret, messages))
 	mux.Handle("GET /rooms/{id}/messages", RequireAuth(jwtSecret, messages))

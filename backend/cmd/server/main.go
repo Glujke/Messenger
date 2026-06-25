@@ -41,7 +41,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService, authService)
 	meHandler := handler.NewMeHandler()
 	roomService := service.NewRoomService(store, store, store)
-	roomsHandler := handler.NewRoomsHandler(roomService, roomService)
+	roomsHandler := handler.NewRoomsHandler(roomService, roomService, roomService)
 	attachmentService := service.NewAttachmentService(store, store, fileStore, cfg.MaxUploadBytes)
 	attachmentsHandler := handler.NewAttachmentsHandler(attachmentService, attachmentService)
 	contactService := service.NewContactService(store, store)

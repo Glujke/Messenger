@@ -21,17 +21,24 @@ type RoomLister interface {
 	ListRooms(ctx context.Context, userID int64) ([]service.RoomListItem, error)
 }
 
+// GroupRoomCreator creates a new group room.
+type GroupRoomCreator interface {
+	CreateGroup(ctx context.Context, creatorID int64, name string, memberIDs []int64) (int64, error)
+}
+
 // RoomsHandler serves room endpoints.
 type RoomsHandler struct {
 	direct DirectRoomOpener
 	list   RoomLister
+	groups GroupRoomCreator
 }
 
 // NewRoomsHandler creates a rooms HTTP handler.
-func NewRoomsHandler(direct DirectRoomOpener, list RoomLister) *RoomsHandler {
+func NewRoomsHandler(direct DirectRoomOpener, list RoomLister, groups GroupRoomCreator) *RoomsHandler {
 	return &RoomsHandler{
 		direct: direct,
 		list:   list,
+		groups: groups,
 	}
 }
 
@@ -44,6 +51,15 @@ type directRoomResponse struct {
 	PeerID int64 `json:"peer_id"`
 }
 
+type createGroupRequest struct {
+	Name    string  `json:"name"`
+	UserIDs []int64 `json:"user_ids"`
+}
+
+type createGroupResponse struct {
+	ID int64 `json:"id"`
+}
+
 type roomListResponse struct {
 	Rooms []service.RoomListItem `json:"rooms"`
 }
@@ -53,6 +69,8 @@ func (h *RoomsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/rooms/direct":
 		h.serveDirect(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/rooms/group":
+		h.serveGroup(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/rooms":
 		h.serveList(w, r)
 	default:
@@ -103,6 +121,36 @@ func (h *RoomsHandler) serveDirect(w http.ResponseWriter, r *http.Request) {
 		ID:     result.ID,
 		PeerID: result.PeerID,
 	})
+}
+
+func (h *RoomsHandler) serveGroup(w http.ResponseWriter, r *http.Request) {
+	caller, ok := AuthUserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
+		return
+	}
+
+	var req createGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid json"})
+		return
+	}
+
+	roomID, err := h.groups.CreateGroup(r.Context(), caller.ID, req.Name, req.UserIDs)
+	if errors.Is(err, domain.ErrInvalidRoomName) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	if errors.Is(err, service.ErrPeerNotVerified) || errors.Is(err, domain.ErrNotContact) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, createGroupResponse{ID: roomID})
 }
 
 func (h *RoomsHandler) serveList(w http.ResponseWriter, r *http.Request) {

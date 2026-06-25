@@ -39,6 +39,15 @@ func (m *mockRoomLister) ListRooms(context.Context, int64) ([]service.RoomListIt
 	return m.rooms, m.err
 }
 
+type mockGroupRoomCreator struct {
+	roomID int64
+	err    error
+}
+
+func (m *mockGroupRoomCreator) CreateGroup(_ context.Context, creatorID int64, name string, memberIDs []int64) (int64, error) {
+	return m.roomID, m.err
+}
+
 func TestRoomsHandler_CreateDirect(t *testing.T) {
 	h := NewRoomsHandler(
 		&mockDirectRoomOpener{
@@ -46,6 +55,7 @@ func TestRoomsHandler_CreateDirect(t *testing.T) {
 			created: true,
 		},
 		&mockRoomLister{},
+		&mockGroupRoomCreator{},
 	)
 
 	body := `{"user_id":2}`
@@ -75,6 +85,7 @@ func TestRoomsHandler_ExistingDirect(t *testing.T) {
 			created: false,
 		},
 		&mockRoomLister{},
+		&mockGroupRoomCreator{},
 	)
 
 	body := `{"user_id":2}`
@@ -93,6 +104,7 @@ func TestRoomsHandler_DirectSelfChat(t *testing.T) {
 	h := NewRoomsHandler(
 		&mockDirectRoomOpener{err: domain.ErrSelfChat},
 		&mockRoomLister{},
+		&mockGroupRoomCreator{},
 	)
 
 	body := `{"user_id":1}`
@@ -111,6 +123,7 @@ func TestRoomsHandler_DirectPeerNotFound(t *testing.T) {
 	h := NewRoomsHandler(
 		&mockDirectRoomOpener{err: repository.ErrNotFound},
 		&mockRoomLister{},
+		&mockGroupRoomCreator{},
 	)
 
 	body := `{"user_id":2}`
@@ -129,6 +142,7 @@ func TestRoomsHandler_DirectPeerNotVerified(t *testing.T) {
 	h := NewRoomsHandler(
 		&mockDirectRoomOpener{err: service.ErrPeerNotVerified},
 		&mockRoomLister{},
+		&mockGroupRoomCreator{},
 	)
 
 	body := `{"user_id":2}`
@@ -151,6 +165,7 @@ func TestRoomsHandler_ListRooms(t *testing.T) {
 				{ID: 10, PeerID: 2, PeerEmail: "peer@example.com"},
 			},
 		},
+		&mockGroupRoomCreator{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
@@ -173,7 +188,7 @@ func TestRoomsHandler_ListRooms(t *testing.T) {
 }
 
 func TestRoomsHandler_ListRooms_Empty(t *testing.T) {
-	h := NewRoomsHandler(&mockDirectRoomOpener{}, &mockRoomLister{})
+	h := NewRoomsHandler(&mockDirectRoomOpener{}, &mockRoomLister{}, &mockGroupRoomCreator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
 	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
@@ -195,7 +210,7 @@ func TestRoomsHandler_ListRooms_Empty(t *testing.T) {
 }
 
 func TestRoomsHandler_Unauthorized(t *testing.T) {
-	h := NewRoomsHandler(&mockDirectRoomOpener{}, &mockRoomLister{})
+	h := NewRoomsHandler(&mockDirectRoomOpener{}, &mockRoomLister{}, &mockGroupRoomCreator{})
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
 	rec := httptest.NewRecorder()
@@ -211,6 +226,7 @@ func TestRoomsHandler_ListRooms_InternalError(t *testing.T) {
 	h := NewRoomsHandler(
 		&mockDirectRoomOpener{},
 		&mockRoomLister{err: errors.New("db down")},
+		&mockGroupRoomCreator{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/rooms", nil)
@@ -221,5 +237,32 @@ func TestRoomsHandler_ListRooms_InternalError(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestRoomsHandler_CreateGroup(t *testing.T) {
+	h := NewRoomsHandler(
+		&mockDirectRoomOpener{},
+		&mockRoomLister{},
+		&mockGroupRoomCreator{roomID: 42},
+	)
+
+	body := `{"name":"Project Team","user_ids":[2,3]}`
+	req := httptest.NewRequest(http.MethodPost, "/rooms/group", bytes.NewBufferString(body))
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 1, Email: "user1@example.com", Username: "user1"}))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+
+	var resp createGroupResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.ID != 42 {
+		t.Fatalf("id = %d, want 42", resp.ID)
 	}
 }
