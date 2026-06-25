@@ -32,6 +32,7 @@ type MessageService struct {
 	messages    repository.MessageStore
 	attachments repository.AttachmentStore
 	broadcaster MessageBroadcaster
+	encrypter   domain.MessageEncrypter
 }
 
 // NewMessageService creates a message service.
@@ -40,12 +41,14 @@ func NewMessageService(
 	messages repository.MessageStore,
 	attachments repository.AttachmentStore,
 	broadcaster MessageBroadcaster,
+	encrypter domain.MessageEncrypter,
 ) *MessageService {
 	return &MessageService{
 		rooms:       rooms,
 		messages:    messages,
 		attachments: attachments,
 		broadcaster: broadcaster,
+		encrypter:   encrypter,
 	}
 }
 
@@ -125,12 +128,20 @@ func (s *MessageService) saveAndBroadcast(
 		return MessageItem{}, ErrNotRoomMember
 	}
 
-	record, err := s.messages.SaveMessage(ctx, roomID, senderID, messageType, body, attachmentID)
+	encryptedBody, err := s.encrypter.Encrypt(body)
 	if err != nil {
 		return MessageItem{}, err
 	}
 
-	item := toMessageItem(record)
+	record, err := s.messages.SaveMessage(ctx, roomID, senderID, messageType, encryptedBody, attachmentID)
+	if err != nil {
+		return MessageItem{}, err
+	}
+
+	item, err := toMessageItem(record, s.encrypter)
+	if err != nil {
+		return MessageItem{}, err
+	}
 	if s.broadcaster != nil {
 		s.broadcaster.BroadcastMessage(roomID, item)
 	}
@@ -161,18 +172,27 @@ func (s *MessageService) List(ctx context.Context, roomID, userID int64, limit i
 
 	items := make([]MessageItem, 0, len(records))
 	for _, record := range records {
-		items = append(items, toMessageItem(record))
+		item, err := toMessageItem(record, s.encrypter)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
 	}
 	return items, nil
 }
 
-func toMessageItem(record repository.MessageRecord) MessageItem {
+func toMessageItem(record repository.MessageRecord, encrypter domain.MessageEncrypter) (MessageItem, error) {
+	body, err := encrypter.Decrypt(record.Body)
+	if err != nil {
+		return MessageItem{}, err
+	}
+
 	item := MessageItem{
 		ID:        record.ID,
 		RoomID:    record.RoomID,
 		SenderID:  record.SenderID,
 		Type:      record.Type,
-		Body:      record.Body,
+		Body:      body,
 		CreatedAt: record.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if record.Attachment != nil {
@@ -183,5 +203,5 @@ func toMessageItem(record repository.MessageRecord) MessageItem {
 			SizeBytes:   record.Attachment.SizeBytes,
 		}
 	}
-	return item
+	return item, nil
 }

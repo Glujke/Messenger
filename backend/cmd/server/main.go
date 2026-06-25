@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"messenger/backend/internal/config"
+	"messenger/backend/internal/domain"
 	"messenger/backend/internal/handler"
 	"messenger/backend/internal/platform/db"
 	"messenger/backend/internal/platform/storage"
@@ -46,7 +47,7 @@ func main() {
 	attachmentsHandler := handler.NewAttachmentsHandler(attachmentService, attachmentService)
 	contactService := service.NewContactService(store, store)
 	contactsHandler := handler.NewContactsHandler(contactService)
-	messageService := service.NewMessageService(store, store, store, hub)
+	messageService := service.NewMessageService(store, store, store, hub, domain.NewXOREncrypter(cfg.EncryptionKey))
 	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, store, logger)
 	router := handler.NewRouter(logger, store, authHandler, meHandler, contactsHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)

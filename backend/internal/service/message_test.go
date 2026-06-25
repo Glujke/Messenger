@@ -47,6 +47,22 @@ func (m *mockRoomStoreWithMember) IsRoomMember(ctx context.Context, roomID, user
 	return m.isMemberFn(ctx, roomID, userID)
 }
 
+type mockBroadcaster struct {
+	called bool
+	roomID int64
+	item   MessageItem
+}
+
+func (m *mockBroadcaster) BroadcastMessage(roomID int64, item MessageItem) {
+	m.called = true
+	m.roomID = roomID
+	m.item = item
+}
+
+func testEncrypter() domain.MessageEncrypter {
+	return domain.NewXOREncrypter("test-key")
+}
+
 func TestMessageService_SendText(t *testing.T) {
 	rooms := &mockRoomStoreWithMember{
 		isMemberFn: func(_ context.Context, roomID, userID int64) (bool, error) {
@@ -66,7 +82,7 @@ func TestMessageService_SendText(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages, nil, nil)
+	svc := NewMessageService(rooms, messages, nil, nil, testEncrypter())
 	item, err := svc.SendText(context.Background(), 1, 2, "hello")
 	if err != nil {
 		t.Fatalf("SendText() error = %v", err)
@@ -76,13 +92,44 @@ func TestMessageService_SendText(t *testing.T) {
 	}
 }
 
+func TestMessageService_SendText_EncryptsBodyBeforeSave(t *testing.T) {
+	enc := testEncrypter()
+	var savedBody string
+
+	rooms := &mockRoomStoreWithMember{
+		isMemberFn: func(context.Context, int64, int64) (bool, error) {
+			return true, nil
+		},
+	}
+	messages := &mockMessageStore{
+		saveFn: func(_ context.Context, _, _ int64, _, body string, _ *int64) (repository.MessageRecord, error) {
+			savedBody = body
+			return repository.MessageRecord{
+				ID: 10, Body: body, Type: "text", CreatedAt: time.Unix(1, 0),
+			}, nil
+		},
+	}
+
+	svc := NewMessageService(rooms, messages, nil, nil, enc)
+	item, err := svc.SendText(context.Background(), 1, 2, "hello")
+	if err != nil {
+		t.Fatalf("SendText() error = %v", err)
+	}
+	if savedBody == "hello" {
+		t.Fatal("saved body must be encrypted")
+	}
+	if item.Body != "hello" {
+		t.Fatalf("item.Body = %q, want %q", item.Body, "hello")
+	}
+}
+
 func TestMessageService_SendText_NotMember(t *testing.T) {
 	rooms := &mockRoomStoreWithMember{
 		isMemberFn: func(context.Context, int64, int64) (bool, error) {
 			return false, nil
 		},
 	}
-	svc := NewMessageService(rooms, &mockMessageStore{}, nil, nil)
+	svc := NewMessageService(rooms, &mockMessageStore{}, nil, nil, testEncrypter())
 	_, err := svc.SendText(context.Background(), 1, 2, "hello")
 	if !errors.Is(err, ErrNotRoomMember) {
 		t.Fatalf("SendText() error = %v, want %v", err, ErrNotRoomMember)
@@ -90,7 +137,7 @@ func TestMessageService_SendText_NotMember(t *testing.T) {
 }
 
 func TestMessageService_SendText_InvalidBody(t *testing.T) {
-	svc := NewMessageService(&mockRoomStoreWithMember{}, &mockMessageStore{}, nil, nil)
+	svc := NewMessageService(&mockRoomStoreWithMember{}, &mockMessageStore{}, nil, nil, testEncrypter())
 	_, err := svc.SendText(context.Background(), 1, 2, "   ")
 	if !errors.Is(err, domain.ErrEmptyMessageBody) {
 		t.Fatalf("SendText() error = %v, want %v", err, domain.ErrEmptyMessageBody)
@@ -112,7 +159,7 @@ func TestMessageService_SendText_Broadcasts(t *testing.T) {
 	}
 	broadcaster := &mockBroadcaster{}
 
-	svc := NewMessageService(rooms, messages, nil, broadcaster)
+	svc := NewMessageService(rooms, messages, nil, broadcaster, testEncrypter())
 	if _, err := svc.SendText(context.Background(), 1, 2, "hello"); err != nil {
 		t.Fatal(err)
 	}
@@ -148,29 +195,61 @@ func TestMessageService_SendAttachment(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages, attachments, nil)
+	svc := NewMessageService(rooms, messages, attachments, nil, testEncrypter())
 	item, err := svc.SendAttachment(context.Background(), 1, 2, attachmentID, "caption")
 	if err != nil {
 		t.Fatalf("SendAttachment() error = %v", err)
 	}
-	if item.Type != "image" || item.Attachment == nil || item.Attachment.ID != 5 {
+	if item.Type != "image" || item.Attachment == nil || item.Attachment.ID != 5 || item.Body != "caption" {
 		t.Fatalf("item = %+v", item)
 	}
 }
 
-type mockBroadcaster struct {
-	called bool
-	roomID int64
-	item   MessageItem
-}
+func TestMessageService_SendAttachment_EncryptsCaption(t *testing.T) {
+	enc := testEncrypter()
+	var savedBody string
 
-func (m *mockBroadcaster) BroadcastMessage(roomID int64, item MessageItem) {
-	m.called = true
-	m.roomID = roomID
-	m.item = item
+	rooms := &mockRoomStoreWithMember{
+		isMemberFn: func(context.Context, int64, int64) (bool, error) {
+			return true, nil
+		},
+	}
+	messages := &mockMessageStore{
+		saveFn: func(_ context.Context, _, _ int64, _, body string, _ *int64) (repository.MessageRecord, error) {
+			savedBody = body
+			return repository.MessageRecord{
+				ID: 11, Body: body, Type: "image", CreatedAt: time.Unix(1, 0),
+			}, nil
+		},
+	}
+	attachments := &mockAttachmentStore{
+		findFn: func(context.Context, int64) (repository.AttachmentRecord, error) {
+			return repository.AttachmentRecord{
+				ID: 5, RoomID: 1, ContentType: "image/png", Filename: "photo.png", SizeBytes: 100,
+			}, nil
+		},
+	}
+
+	svc := NewMessageService(rooms, messages, attachments, nil, enc)
+	item, err := svc.SendAttachment(context.Background(), 1, 2, 5, "caption")
+	if err != nil {
+		t.Fatalf("SendAttachment() error = %v", err)
+	}
+	if savedBody == "caption" {
+		t.Fatal("saved caption must be encrypted")
+	}
+	if item.Body != "caption" {
+		t.Fatalf("item.Body = %q, want %q", item.Body, "caption")
+	}
 }
 
 func TestMessageService_List(t *testing.T) {
+	enc := testEncrypter()
+	encrypted, err := enc.Encrypt("hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	rooms := &mockRoomStoreWithMember{
 		isMemberFn: func(_ context.Context, roomID, userID int64) (bool, error) {
 			return roomID == 1 && userID == 2, nil
@@ -179,12 +258,12 @@ func TestMessageService_List(t *testing.T) {
 	messages := &mockMessageStore{
 		listFn: func(_ context.Context, roomID int64, limit int, beforeID int64) ([]repository.MessageRecord, error) {
 			return []repository.MessageRecord{
-				{ID: 10, RoomID: roomID, SenderID: 2, Type: "text", Body: "hello", CreatedAt: time.Unix(1, 0)},
+				{ID: 10, RoomID: roomID, SenderID: 2, Type: "text", Body: encrypted, CreatedAt: time.Unix(1, 0)},
 			}, nil
 		},
 	}
 
-	svc := NewMessageService(rooms, messages, nil, nil)
+	svc := NewMessageService(rooms, messages, nil, nil, enc)
 	items, err := svc.List(context.Background(), 1, 2, 0, 0)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -200,7 +279,7 @@ func TestMessageService_List_NotMember(t *testing.T) {
 			return false, nil
 		},
 	}
-	svc := NewMessageService(rooms, &mockMessageStore{}, nil, nil)
+	svc := NewMessageService(rooms, &mockMessageStore{}, nil, nil, testEncrypter())
 	_, err := svc.List(context.Background(), 1, 2, 0, 0)
 	if !errors.Is(err, ErrNotRoomMember) {
 		t.Fatalf("List() error = %v, want %v", err, ErrNotRoomMember)
@@ -221,7 +300,7 @@ func TestMessageService_List_DefaultLimit(t *testing.T) {
 		},
 	}
 
-	svc := NewMessageService(rooms, messages, nil, nil)
+	svc := NewMessageService(rooms, messages, nil, nil, testEncrypter())
 	if _, err := svc.List(context.Background(), 1, 2, 0, 0); err != nil {
 		t.Fatal(err)
 	}

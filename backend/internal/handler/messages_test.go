@@ -8,8 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"messenger/backend/internal/domain"
+	"messenger/backend/internal/repository"
 	"messenger/backend/internal/service"
 )
 
@@ -258,4 +260,72 @@ func TestMessagesHandler_Send_InternalError(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
+}
+
+func TestMessagesHandler_Send_ReturnsDecryptedBody(t *testing.T) {
+	enc := domain.NewXOREncrypter("handler-test-key")
+	rooms := &handlerMessageRoomStore{}
+	messages := &handlerMessageStore{}
+	svc := service.NewMessageService(rooms, messages, nil, nil, enc)
+	h := NewMessagesHandler(svc, svc)
+
+	body := `{"body":"secret message"}`
+	req := httptest.NewRequest(http.MethodPost, "/rooms/1/messages", bytes.NewBufferString(body))
+	req.SetPathValue("id", "1")
+	req = req.WithContext(WithAuthUser(req.Context(), AuthUser{ID: 2, Email: "user2@example.com", Username: "user2"}))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if messages.savedBody == "secret message" {
+		t.Fatal("saved body must be encrypted")
+	}
+
+	var item service.MessageItem
+	if err := json.NewDecoder(rec.Body).Decode(&item); err != nil {
+		t.Fatal(err)
+	}
+	if item.Body != "secret message" {
+		t.Fatalf("item.Body = %q, want %q", item.Body, "secret message")
+	}
+}
+
+type handlerMessageRoomStore struct{}
+
+func (handlerMessageRoomStore) FindDirectRoom(context.Context, int64, int64) (int64, bool, error) {
+	panic("not implemented")
+}
+
+func (handlerMessageRoomStore) CreateDirectRoom(context.Context, int64, int64) (int64, error) {
+	panic("not implemented")
+}
+
+func (handlerMessageRoomStore) ListUserRooms(context.Context, int64) ([]repository.RoomListRecord, error) {
+	panic("not implemented")
+}
+
+func (handlerMessageRoomStore) CreateGroupRoom(context.Context, string, int64, []int64) (int64, error) {
+	panic("not implemented")
+}
+
+func (handlerMessageRoomStore) IsRoomMember(context.Context, int64, int64) (bool, error) {
+	return true, nil
+}
+
+type handlerMessageStore struct {
+	savedBody string
+}
+
+func (s *handlerMessageStore) SaveMessage(_ context.Context, roomID, senderID int64, messageType, body string, _ *int64) (repository.MessageRecord, error) {
+	s.savedBody = body
+	return repository.MessageRecord{
+		ID: 10, RoomID: roomID, SenderID: senderID, Type: messageType, Body: body, CreatedAt: time.Unix(1, 0),
+	}, nil
+}
+
+func (handlerMessageStore) ListMessages(context.Context, int64, int, int64) ([]repository.MessageRecord, error) {
+	panic("not implemented")
 }

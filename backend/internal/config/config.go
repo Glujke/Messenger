@@ -14,6 +14,7 @@ type Config struct {
 	JWTTTL         time.Duration
 	UploadDir      string
 	MaxUploadBytes int64
+	EncryptionKey    string
 }
 
 // Load reads configuration from the environment with sensible defaults for local development.
@@ -25,6 +26,7 @@ func Load() Config {
 		JWTTTL:         envDuration("JWT_TTL", 24*time.Hour),
 		UploadDir:      env("UPLOAD_DIR", "./uploads"),
 		MaxUploadBytes: envInt64("MAX_UPLOAD_BYTES", 20<<20),
+		EncryptionKey:  env("ENCRYPTION_KEY", "dev-encryption-key-change-me"),
 	}
 }
 
