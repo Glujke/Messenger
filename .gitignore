@@ -66,3 +66,4 @@ fyne_app_*
 # Debug
 __debug_bin*
 *.pdb
+dist/
