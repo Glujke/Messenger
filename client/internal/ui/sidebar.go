@@ -98,12 +98,20 @@ func (s *Sidebar) Content() fyne.CanvasObject {
 	contactsBtn := widget.NewButtonWithIcon("", theme.AccountIcon(), func() {
 		ShowContactsDialog(s.state)
 	})
-	
+
+	profileBtn := widget.NewButtonWithIcon("", theme.LoginIcon(), func() {
+		ShowProfileDialog(s.state)
+	})
+
+	settingsBtn := widget.NewButtonWithIcon("", theme.SettingsIcon(), func() {
+		ShowSettingsDialog(s.state)
+	})
+
 	addGroupBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		ShowCreateGroupDialog(s.state)
 	})
-	
-	header := container.NewBorder(nil, nil, nil, container.NewHBox(addGroupBtn, contactsBtn), container.NewPadded(title))
+
+	header := container.NewBorder(nil, nil, nil, container.NewHBox(addGroupBtn, contactsBtn, profileBtn, settingsBtn), container.NewPadded(title))
 	
 	return container.NewBorder(header, nil, nil, nil, s.list)
 }

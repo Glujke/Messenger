@@ -347,3 +347,75 @@ func TestClient_SendAttachmentMessage_Success(t *testing.T) {
 		t.Fatalf("unexpected message: %+v", msg)
 	}
 }
+
+func TestClient_GetMe_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/me" || r.Method != http.MethodGet {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer fake-token" {
+			t.Fatalf("unexpected auth header: %s", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id": 1, "email": "user@example.com", "username": "user",
+		})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	profile, err := client.GetMe(context.Background(), "fake-token")
+	if err != nil {
+		t.Fatalf("GetMe() error = %v", err)
+	}
+	if profile.Email != "user@example.com" || profile.Username != "user" {
+		t.Fatalf("profile = %+v", profile)
+	}
+}
+
+func TestClient_UpdateUsername_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/auth/me" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		var req map[string]string
+		json.NewDecoder(r.Body).Decode(&req)
+		if req["username"] != "newname" {
+			t.Fatalf("username = %q", req["username"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id": 1, "email": "user@example.com", "username": "newname",
+		})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	profile, err := client.UpdateUsername(context.Background(), "fake-token", "newname")
+	if err != nil {
+		t.Fatalf("UpdateUsername() error = %v", err)
+	}
+	if profile.Username != "newname" {
+		t.Fatalf("profile = %+v", profile)
+	}
+}
+
+func TestClient_ChangePassword_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/auth/password" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		var req map[string]string
+		json.NewDecoder(r.Body).Decode(&req)
+		if req["old_password"] != "oldsecret1" || req["new_password"] != "newsecret1" {
+			t.Fatalf("unexpected body: %+v", req)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	if err := client.ChangePassword(context.Background(), "fake-token", "oldsecret1", "newsecret1"); err != nil {
+		t.Fatalf("ChangePassword() error = %v", err)
+	}
+}

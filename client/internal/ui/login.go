@@ -29,11 +29,18 @@ func (s *LoginScreen) Content() fyne.CanvasObject {
 	passwordEntry := widget.NewPasswordEntry()
 	passwordEntry.SetPlaceHolder("Password")
 
+	rememberCheck := widget.NewCheck("Запомнить меня", nil)
+
+	settingsBtn := widget.NewButton("Настройки", func() {
+		ShowSettingsDialog(s.state)
+	})
+
 	var loginBtn *widget.Button
 	loginBtn = widget.NewButton("Login", func() {
 		loginBtn.Disable()
 		loginBtn.SetText("Logging in...")
 
+		remember := rememberCheck.Checked
 		go func() {
 			token, err := s.state.API.Login(context.Background(), emailEntry.Text, passwordEntry.Text)
 			if err != nil {
@@ -46,13 +53,13 @@ func (s *LoginScreen) Content() fyne.CanvasObject {
 				return
 			}
 			log.Printf("login: success, starting post-login flow")
+			s.state.SaveAuthSession(token, remember)
 			s.state.SetToken(token)
 		}()
 	})
 	loginBtn.Importance = widget.HighImportance
 
 	registerBtn := widget.NewButton("Create Account", func() {
-		// Switch to register screen (logic will be in main/state)
 		s.showRegister()
 	})
 
@@ -60,9 +67,11 @@ func (s *LoginScreen) Content() fyne.CanvasObject {
 		widget.NewLabelWithStyle("Welcome to Messenger", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		emailEntry,
 		passwordEntry,
+		rememberCheck,
 		loginBtn,
 		widget.NewSeparator(),
 		registerBtn,
+		settingsBtn,
 	)
 
 	return container.NewCenter(container.NewPadded(form))

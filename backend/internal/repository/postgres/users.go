@@ -122,3 +122,57 @@ func (s *Store) FindByID(ctx context.Context, id int64) (repository.UserRecord, 
 
 	return record, nil
 }
+
+// UpdateUsername changes the username for an existing user.
+func (s *Store) UpdateUsername(ctx context.Context, id int64, username string) (repository.UserRecord, error) {
+	const query = `
+		UPDATE users
+		SET username = $2
+		WHERE id = $1
+		RETURNING id, email, username, password_hash, verified, created_at
+	`
+
+	var record repository.UserRecord
+	err := s.db.QueryRowContext(ctx, query, id, strings.ToLower(username)).Scan(
+		&record.ID,
+		&record.Email,
+		&record.Username,
+		&record.PasswordHash,
+		&record.Verified,
+		&record.CreatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return repository.UserRecord{}, repository.ErrNotFound
+	}
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "username") {
+			return repository.UserRecord{}, repository.ErrUsernameTaken
+		}
+		return repository.UserRecord{}, err
+	}
+
+	return record, nil
+}
+
+// UpdatePasswordHash replaces the password hash for an existing user.
+func (s *Store) UpdatePasswordHash(ctx context.Context, id int64, passwordHash string) error {
+	const query = `
+		UPDATE users
+		SET password_hash = $2
+		WHERE id = $1
+	`
+
+	res, err := s.db.ExecContext(ctx, query, id, passwordHash)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
+}

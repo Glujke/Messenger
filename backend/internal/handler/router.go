@@ -13,6 +13,7 @@ func NewRouter(
 	store repository.Store,
 	auth *AuthHandler,
 	me *MeHandler,
+	password *PasswordHandler,
 	contacts *ContactsHandler,
 	rooms *RoomsHandler,
 	messages *MessagesHandler,
@@ -30,6 +31,8 @@ func NewRouter(
 	mux.Handle("POST /auth/register", auth)
 	mux.Handle("POST /auth/login", auth)
 	mux.Handle("GET /auth/me", RequireAuth(jwtSecret, me))
+	mux.Handle("PATCH /auth/me", RequireAuth(jwtSecret, me))
+	mux.Handle("POST /auth/password", RequireAuth(jwtSecret, password))
 	mux.Handle("POST /contacts/invite", RequireAuth(jwtSecret, contacts))
 	mux.Handle("GET /contacts/requests", RequireAuth(jwtSecret, contacts))
 	mux.Handle("POST /contacts/requests/", RequireAuth(jwtSecret, contacts))

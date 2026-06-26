@@ -31,6 +31,107 @@ func New(baseURL string) *Client {
 	}
 }
 
+// UserProfile describes the authenticated user.
+type UserProfile struct {
+	ID       int64  `json:"id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+}
+
+// GetMe returns the current user's profile.
+func (c *Client) GetMe(ctx context.Context, token string) (UserProfile, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/auth/me", nil)
+	if err != nil {
+		return UserProfile{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return UserProfile{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return UserProfile{}, fmt.Errorf("%s", errResp.Error)
+		}
+		return UserProfile{}, fmt.Errorf("failed to get profile: %s", resp.Status)
+	}
+
+	var profile UserProfile
+	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
+		return UserProfile{}, err
+	}
+	return profile, nil
+}
+
+// UpdateUsername changes the authenticated user's username.
+func (c *Client) UpdateUsername(ctx context.Context, token, username string) (UserProfile, error) {
+	body, _ := json.Marshal(map[string]string{"username": username})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, c.baseURL+"/auth/me", bytes.NewBuffer(body))
+	if err != nil {
+		return UserProfile{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return UserProfile{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return UserProfile{}, fmt.Errorf("%s", errResp.Error)
+		}
+		return UserProfile{}, fmt.Errorf("failed to update username: %s", resp.Status)
+	}
+
+	var profile UserProfile
+	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
+		return UserProfile{}, err
+	}
+	return profile, nil
+}
+
+// ChangePassword updates the authenticated user's password.
+func (c *Client) ChangePassword(ctx context.Context, token, oldPassword, newPassword string) error {
+	body, _ := json.Marshal(map[string]string{
+		"old_password": oldPassword,
+		"new_password": newPassword,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/auth/password", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return fmt.Errorf("%s", errResp.Error)
+		}
+		return fmt.Errorf("failed to change password: %s", resp.Status)
+	}
+	return nil
+}
+
 // Login authenticates a user and returns a JWT token.
 func (c *Client) Login(ctx context.Context, email, password string) (string, error) {
 	body, _ := json.Marshal(map[string]string{

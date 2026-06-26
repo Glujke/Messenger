@@ -28,4 +28,6 @@ type UserStore interface {
 	FindByEmail(ctx context.Context, email string) (UserRecord, error)
 	FindByUsername(ctx context.Context, username string) (UserRecord, error)
 	FindByID(ctx context.Context, id int64) (UserRecord, error)
+	UpdateUsername(ctx context.Context, id int64, username string) (UserRecord, error)
+	UpdatePasswordHash(ctx context.Context, id int64, passwordHash string) error
 }

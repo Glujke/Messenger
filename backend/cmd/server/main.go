@@ -40,7 +40,9 @@ func main() {
 	hub := service.NewHub()
 	authService := service.NewAuthService(store, cfg.JWTSecret, cfg.JWTTTL)
 	authHandler := handler.NewAuthHandler(authService, authService)
-	meHandler := handler.NewMeHandler()
+	profileService := service.NewProfileService(store)
+	meHandler := handler.NewMeHandler(profileService)
+	passwordHandler := handler.NewPasswordHandler(profileService)
 	roomService := service.NewRoomService(store, store, store)
 	roomsHandler := handler.NewRoomsHandler(roomService, roomService, roomService)
 	attachmentService := service.NewAttachmentService(store, store, fileStore, cfg.MaxUploadBytes)
@@ -50,7 +52,7 @@ func main() {
 	messageService := service.NewMessageService(store, store, store, hub, domain.NewXOREncrypter(cfg.EncryptionKey))
 	messagesHandler := handler.NewMessagesHandler(messageService, messageService)
 	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret, store, logger)
-	router := handler.NewRouter(logger, store, authHandler, meHandler, contactsHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)
+	router := handler.NewRouter(logger, store, authHandler, meHandler, passwordHandler, contactsHandler, roomsHandler, messagesHandler, attachmentsHandler, wsHandler, cfg.JWTSecret)
 
 	server := &http.Server{
 		Addr:         ":" + cfg.HTTPPort,

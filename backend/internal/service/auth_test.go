@@ -33,6 +33,14 @@ func (m *mockUserStore) FindByID(context.Context, int64) (repository.UserRecord,
 	return repository.UserRecord{}, repository.ErrNotFound
 }
 
+func (m *mockUserStore) UpdateUsername(context.Context, int64, string) (repository.UserRecord, error) {
+	panic("not implemented")
+}
+
+func (m *mockUserStore) UpdatePasswordHash(context.Context, int64, string) error {
+	panic("not implemented")
+}
+
 func TestAuthService_Register(t *testing.T) {
 	store := &mockUserStore{
 		createFn: func(_ context.Context, email, username, passwordHash string) (repository.UserRecord, error) {

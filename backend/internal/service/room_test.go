@@ -55,6 +55,14 @@ func (m *mockUserStoreWithID) FindByID(ctx context.Context, id int64) (repositor
 	return m.findByIDFn(ctx, id)
 }
 
+func (m *mockUserStoreWithID) UpdateUsername(context.Context, int64, string) (repository.UserRecord, error) {
+	panic("not implemented")
+}
+
+func (m *mockUserStoreWithID) UpdatePasswordHash(context.Context, int64, string) error {
+	panic("not implemented")
+}
+
 func TestRoomService_GetOrCreateDirect_Creates(t *testing.T) {
 	users := &mockUserStoreWithID{
 		findByIDFn: func(_ context.Context, id int64) (repository.UserRecord, error) {
