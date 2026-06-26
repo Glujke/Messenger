@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"messenger/client/internal/api"
 	"messenger/client/internal/config"
 	"messenger/client/internal/state"
 	"messenger/client/internal/storage"
@@ -17,7 +16,7 @@ import (
 
 func main() {
 	cfg := config.Default()
-	a := app.New()
+	a := app.NewWithID(cfg.AppName)
 	w := a.NewWindow(cfg.AppName)
 	w.Resize(fyne.NewSize(400, 500))
 	w.SetFixedSize(false)
@@ -60,6 +59,10 @@ func main() {
 			s.Email = profile.Email
 			s.Username = profile.Username
 
+			if err := s.RefreshContacts(context.Background()); err != nil {
+				log.Printf("post-login: contacts error: %v", err)
+			}
+
 			log.Printf("post-login: fetching rooms")
 			rooms, err := s.API.GetRooms(context.Background(), s.Token)
 			if err != nil {
@@ -71,13 +74,8 @@ func main() {
 			}
 			log.Printf("post-login: got %d rooms", len(rooms))
 
-			log.Printf("post-login: dialing websocket")
-			ws, err := api.Dial(s.ServerURL, s.Token)
-			if err != nil {
-				log.Printf("post-login: websocket error: %v", err)
-			} else {
-				log.Printf("post-login: websocket connected")
-			}
+			log.Printf("post-login: starting websocket manager")
+			s.StartWSManager()
 
 			fyne.Do(func() {
 				mainScreen := ui.NewMainScreen(s)
@@ -91,26 +89,6 @@ func main() {
 
 				w.Resize(fyne.NewSize(900, 600))
 				log.Printf("post-login: UI ready")
-
-				if ws != nil {
-					s.WS = ws
-					go func() {
-						for {
-							event, err := ws.ReadEvent()
-							if err != nil {
-								log.Printf("WS read error: %v", err)
-								return
-							}
-							if event.Type == api.ServerEventNewMessage {
-								if event.Message.RoomID == s.ActiveRoomID {
-									state.RunOnUI(func() {
-										s.AddMessage(event.Message)
-									})
-								}
-							}
-						}
-					}()
-				}
 			})
 		}()
 	}

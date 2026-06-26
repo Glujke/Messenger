@@ -28,6 +28,9 @@ func NewMainScreen(s *state.AppState) *MainScreen {
 	s.OnRoomsUpdate = func() {
 		ms.sidebar.list.Refresh()
 	}
+	s.OnOpenRoom = func(roomID int64) {
+		ms.sidebar.OpenRoom(roomID)
+	}
 
 	return ms
 }

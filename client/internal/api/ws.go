@@ -16,7 +16,7 @@ type ServerEvent struct {
 }
 
 const (
-	ServerEventNewMessage = "new_message"
+	ServerEventNewMessage = "message.new"
 	ServerEventError      = "error"
 )
 

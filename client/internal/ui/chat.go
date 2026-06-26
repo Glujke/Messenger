@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -30,15 +31,18 @@ const (
 
 // ChatArea is the right panel with message history and input.
 type ChatArea struct {
-	state        *state.AppState
-	list         *widget.List
-	input        *chatEntry
-	send         *widget.Button
-	attach       *widget.Button
-	dropBound    bool
-	imageCache   map[int64]fyne.Resource
-	imageLoading map[int64]bool
-	imageMu      sync.Mutex
+	state           *state.AppState
+	list            *widget.List
+	loadingLabel    *widget.Label
+	input           *chatEntry
+	send            *widget.Button
+	attach          *widget.Button
+	dropBound       bool
+	imageCache      map[int64]fyne.Resource
+	imageLoading    map[int64]bool
+	imageMu         sync.Mutex
+	loadingMore     bool
+	scrollWatchStop chan struct{}
 }
 
 type chatEntry struct {
@@ -76,13 +80,99 @@ func NewChatArea(s *state.AppState) *ChatArea {
 		ca.refreshMessages()
 	}
 
+	ca.loadingLabel = widget.NewLabel("")
+	ca.loadingLabel.Hide()
+
 	return ca
+}
+
+func (ca *ChatArea) stopScrollWatcher() {
+	if ca.scrollWatchStop != nil {
+		close(ca.scrollWatchStop)
+		ca.scrollWatchStop = nil
+	}
+}
+
+func (ca *ChatArea) startScrollWatcher() {
+	ca.stopScrollWatcher()
+	stop := make(chan struct{})
+	ca.scrollWatchStop = stop
+
+	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				fyne.Do(func() {
+					ca.checkScrollTop()
+				})
+			}
+		}
+	}()
+}
+
+func (ca *ChatArea) checkScrollTop() {
+	if ca.loadingMore || !ca.state.HasMoreMessages || ca.state.ActiveRoomID == 0 || len(ca.state.Messages) == 0 {
+		return
+	}
+	if ca.list.GetScrollOffset() > 80 {
+		return
+	}
+	ca.loadOlderMessages()
+}
+
+func (ca *ChatArea) loadOlderMessages() {
+	if ca.loadingMore || !ca.state.HasMoreMessages || len(ca.state.Messages) == 0 {
+		return
+	}
+
+	ca.loadingMore = true
+	ca.loadingLabel.SetText("Загрузка…")
+	ca.loadingLabel.Show()
+
+	beforeID := ca.state.Messages[0].ID
+	savedOffset := ca.list.GetScrollOffset()
+	roomID := ca.state.ActiveRoomID
+
+	go func() {
+		older, err := ca.state.API.GetMessages(
+			context.Background(),
+			ca.state.Token,
+			roomID,
+			state.MessagePageSize,
+			beforeID,
+		)
+		fyne.Do(func() {
+			ca.loadingMore = false
+			ca.loadingLabel.Hide()
+			if err != nil {
+				ca.showError(err)
+				return
+			}
+
+			ca.state.HasMoreMessages = len(older) >= state.MessagePageSize
+			addedHeight := ca.sumItemHeightsForMessages(older)
+			ca.state.PrependMessages(older)
+			ca.list.ScrollToOffset(savedOffset + addedHeight)
+		})
+	}()
+}
+
+func (ca *ChatArea) sumItemHeightsForMessages(messages []api.Message) float32 {
+	var total float32
+	for _, msg := range messages {
+		total += ca.computeRowHeight(msg)
+	}
+	return total
 }
 
 func (ca *ChatArea) refreshMessages() {
 	ca.refreshListHeights()
 	ca.list.Refresh()
-	if len(ca.state.Messages) > 0 {
+	if ca.state.ScrollToBottomOnUpdate && len(ca.state.Messages) > 0 {
 		ca.list.ScrollToBottom()
 	}
 }
@@ -98,11 +188,13 @@ func (ca *ChatArea) setupList() {
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			msg := ca.state.Messages[id]
 			item := obj.(*messageListItem)
+			sender := item.textRow.sender
 			date := item.textRow.date
 			body := item.textRow.body
 			preview := item.preview
 			downloadBtn := item.download
 
+			sender.SetText(ca.state.SenderLabel(msg.SenderID))
 			date.SetText(formatMessageTime(msg.CreatedAt))
 			body.Wrapping = fyne.TextWrapWord
 			preview.hidePreview()
@@ -189,6 +281,7 @@ func (ca *ChatArea) computeRowHeight(msg api.Message) float32 {
 }
 
 func (ca *ChatArea) textRowHeight(msg api.Message, listWidth float32) float32 {
+	senderH := rowHeaderHeight
 	textWidth := listWidth - dateColumnWidth - 8
 	if textWidth < 80 {
 		textWidth = 80
@@ -204,9 +297,9 @@ func (ca *ChatArea) textRowHeight(msg api.Message, listWidth float32) float32 {
 
 	bodyH := estimateWrappedTextHeight(text, textWidth)
 	if bodyH < rowHeaderHeight {
-		return rowHeaderHeight
+		return senderH + rowHeaderHeight
 	}
-	return bodyH
+	return senderH + bodyH
 }
 
 func estimateWrappedTextHeight(text string, width float32) float32 {
@@ -563,19 +656,23 @@ func (ca *ChatArea) sendMessage() {
 // Content returns the chat area layout.
 func (ca *ChatArea) Content() fyne.CanvasObject {
 	if ca.state.ActiveRoomID == 0 {
+		ca.stopScrollWatcher()
 		return container.NewCenter(widget.NewLabel("Select a chat to start messaging"))
 	}
 
 	ca.bindDropHandler()
 	ca.refreshListHeights()
+	ca.startScrollWatcher()
 
 	inputRow := container.NewBorder(nil, nil, ca.attach, ca.send, ca.input)
 	dropHint := canvas.NewText("Drop files here to send", theme.Color(theme.ColorNamePlaceHolder))
 	dropHint.TextSize = theme.TextSize()
 	dropHint.Alignment = fyne.TextAlignCenter
 
+	top := container.NewVBox(ca.loadingLabel, dropHint)
+
 	return container.NewBorder(
-		container.NewPadded(dropHint),
+		container.NewPadded(top),
 		inputRow,
 		nil,
 		nil,

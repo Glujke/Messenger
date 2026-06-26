@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"messenger/client/internal/api"
 	"messenger/client/internal/state"
 
 	"fyne.io/fyne/v2"
@@ -13,31 +14,39 @@ import (
 
 // ShowCreateGroupDialog shows a dialog for creating a new group.
 func ShowCreateGroupDialog(s *state.AppState) {
+	go func() {
+		contacts, err := s.API.ListContacts(context.Background(), s.Token)
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(err, s.Window)
+				return
+			}
+			showCreateGroupDialog(s, contacts)
+		})
+	}()
+}
+
+func showCreateGroupDialog(s *state.AppState, contacts []api.Contact) {
 	nameEntry := widget.NewEntry()
 	nameEntry.SetPlaceHolder("Group Name (3-64 chars)")
 
-	// Fetch fresh contacts
-	go func() {
-		contacts, _ := s.API.ListContacts(context.Background(), s.Token)
-		state.RunOnUI(func() {
-			s.SetContacts(contacts)
-		})
-	}()
-
 	selectedIDs := make(map[int64]bool)
-	
+
+	emptyLabel := widget.NewLabel("Нет контактов")
+	emptyLabel.Hide()
+
 	contactsList := widget.NewList(
-		func() int { return len(s.Contacts) },
+		func() int { return len(contacts) },
 		func() fyne.CanvasObject {
 			return container.NewHBox(widget.NewCheck("", nil), widget.NewLabel("Contact"))
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
-			contact := s.Contacts[id]
+			contact := contacts[id]
 			box := obj.(*fyne.Container)
 			check := box.Objects[0].(*widget.Check)
 			label := box.Objects[1].(*widget.Label)
-			
-			label.SetText(contact.Username)
+
+			label.SetText(contact.Username + " (" + contact.Email + ")")
 			check.Checked = selectedIDs[contact.ID]
 			check.OnChanged = func(checked bool) {
 				if checked {
@@ -49,17 +58,29 @@ func ShowCreateGroupDialog(s *state.AppState) {
 		},
 	)
 
+	if len(contacts) == 0 {
+		emptyLabel.Show()
+		contactsList.Hide()
+	}
+
+	membersBox := container.NewStack(emptyLabel, contactsList)
+
 	form := container.NewBorder(
-		container.NewVBox(widget.NewLabel("Group Name:"), nameEntry, widget.NewSeparator(), widget.NewLabel("Select Members:")),
+		container.NewVBox(
+			widget.NewLabel("Group Name:"),
+			nameEntry,
+			widget.NewSeparator(),
+			widget.NewLabel("Select Members:"),
+		),
 		nil, nil, nil,
-		contactsList,
+		membersBox,
 	)
 
 	d := dialog.NewCustomConfirm("Create Group", "Create", "Cancel", form, func(ok bool) {
 		if !ok {
 			return
 		}
-		
+
 		name := nameEntry.Text
 		if len(name) < 3 {
 			dialog.ShowError(fmt.Errorf("group name too short"), s.Window)
@@ -80,7 +101,13 @@ func ShowCreateGroupDialog(s *state.AppState) {
 				return
 			}
 
-			rooms, _ := s.API.GetRooms(context.Background(), s.Token)
+			rooms, err := s.API.GetRooms(context.Background(), s.Token)
+			if err != nil {
+				fyne.Do(func() {
+					dialog.ShowError(err, s.Window)
+				})
+				return
+			}
 			fyne.Do(func() {
 				s.SetRooms(rooms)
 			})

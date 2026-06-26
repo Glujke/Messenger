@@ -54,3 +54,27 @@ func TestStore_AreContacts(t *testing.T) {
 		t.Fatal("want true")
 	}
 }
+
+func TestStore_ListContacts(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store := NewStore(db)
+	now := time.Now()
+
+	mock.ExpectQuery(`SELECT c.user_id, c.contact_id, c.created_at`).
+		WithArgs(int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "contact_id", "created_at"}).
+			AddRow(int64(1), int64(2), now))
+
+	records, err := store.ListContacts(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].ContactID != 2 {
+		t.Fatalf("records = %+v", records)
+	}
+}

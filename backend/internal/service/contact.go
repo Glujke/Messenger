@@ -30,15 +30,17 @@ type ContactRequestItem struct {
 	FromUserID   int64                       `json:"from_user_id"`
 	ToUserID     int64                       `json:"to_user_id"`
 	Status       domain.ContactRequestStatus `json:"status"`
+	PeerEmail    string                      `json:"peer_email,omitempty"`
+	PeerUsername string                      `json:"peer_username,omitempty"`
 	CreatedAt    time.Time                   `json:"created_at"`
-	RespondedAt *time.Time                   `json:"responded_at,omitempty"`
+	RespondedAt  *time.Time                  `json:"responded_at,omitempty"`
 }
 
 // ContactItem is a DTO for confirmed contacts.
 type ContactItem struct {
-	UserID    int64     `json:"user_id"`
-	ContactID int64     `json:"contact_id"`
-	CreatedAt time.Time `json:"created_at"`
+	ID       int64  `json:"id"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
 }
 
 // Invite sends a contact request to another user by email or username.
@@ -141,16 +143,29 @@ func (s *ContactService) ListRequests(ctx context.Context, userID int64) ([]Cont
 
 	items := make([]ContactRequestItem, 0, len(records))
 	for _, r := range records {
-		items = append(items, ContactRequestItem{
+		item := ContactRequestItem{
 			ID:          r.ID,
 			FromUserID:  r.FromUserID,
 			ToUserID:    r.ToUserID,
 			Status:      r.Status,
 			CreatedAt:   r.CreatedAt,
 			RespondedAt: r.RespondedAt,
-		})
+		}
+		if peer, err := s.peerForRequest(ctx, userID, r); err == nil {
+			item.PeerEmail = peer.Email
+			item.PeerUsername = peer.Username
+		}
+		items = append(items, item)
 	}
 	return items, nil
+}
+
+func (s *ContactService) peerForRequest(ctx context.Context, userID int64, r repository.ContactRequestRecord) (repository.UserRecord, error) {
+	peerID := r.FromUserID
+	if peerID == userID {
+		peerID = r.ToUserID
+	}
+	return s.users.FindByID(ctx, peerID)
 }
 
 // ListContacts returns the user's confirmed friends.
@@ -162,10 +177,17 @@ func (s *ContactService) ListContacts(ctx context.Context, userID int64) ([]Cont
 
 	items := make([]ContactItem, 0, len(records))
 	for _, r := range records {
+		peer, err := s.users.FindByID(ctx, r.ContactID)
+		if errors.Is(err, repository.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, ContactItem{
-			UserID:    r.UserID,
-			ContactID: r.ContactID,
-			CreatedAt: r.CreatedAt,
+			ID:       peer.ID,
+			Email:    peer.Email,
+			Username: peer.Username,
 		})
 	}
 	return items, nil

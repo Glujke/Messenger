@@ -141,10 +141,10 @@ func (s *Store) AddContact(ctx context.Context, userA, userB int64) error {
 // ListContacts returns all confirmed friends for a user.
 func (s *Store) ListContacts(ctx context.Context, userID int64) ([]repository.ContactRecord, error) {
 	const query = `
-		SELECT user_id, contact_id, created_at
-		FROM contacts
-		WHERE user_id = $1
-		ORDER BY created_at DESC
+		SELECT c.user_id, c.contact_id, c.created_at
+		FROM contacts c
+		WHERE c.user_id = $1
+		ORDER BY c.created_at DESC
 	`
 
 	rows, err := s.db.QueryContext(ctx, query, userID)

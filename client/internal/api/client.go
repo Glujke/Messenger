@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -232,12 +233,14 @@ type Message struct {
 
 // ContactRequest represents a contact invitation (incoming or outgoing).
 type ContactRequest struct {
-	ID          int64  `json:"id"`
-	FromUserID  int64  `json:"from_user_id"`
-	ToUserID    int64  `json:"to_user_id"`
-	Status      string `json:"status"` // pending, accepted, rejected
-	CreatedAt   string `json:"created_at"`
-	RespondedAt string `json:"responded_at,omitempty"`
+	ID           int64  `json:"id"`
+	FromUserID   int64  `json:"from_user_id"`
+	ToUserID     int64  `json:"to_user_id"`
+	Status       string `json:"status"`
+	PeerEmail    string `json:"peer_email,omitempty"`
+	PeerUsername string `json:"peer_username,omitempty"`
+	CreatedAt    string `json:"created_at"`
+	RespondedAt  string `json:"responded_at,omitempty"`
 }
 
 // Contact represents a confirmed friend.
@@ -280,9 +283,24 @@ func (c *Client) GetRooms(ctx context.Context, token string) ([]Room, error) {
 	return result.Rooms, nil
 }
 
-// GetMessages returns the history of messages for a room.
-func (c *Client) GetMessages(ctx context.Context, token string, roomID int64) ([]Message, error) {
+// DefaultMessageLimit is the page size for message history requests.
+const DefaultMessageLimit = 50
+
+// GetMessages returns message history for a room.
+// Pass limit=0 to use the server default. Pass beforeID>0 to load older messages.
+func (c *Client) GetMessages(ctx context.Context, token string, roomID int64, limit int, beforeID int64) ([]Message, error) {
 	url := fmt.Sprintf("%s/rooms/%d/messages", c.baseURL, roomID)
+	if limit > 0 || beforeID > 0 {
+		q := make([]string, 0, 2)
+		if limit > 0 {
+			q = append(q, fmt.Sprintf("limit=%d", limit))
+		}
+		if beforeID > 0 {
+			q = append(q, fmt.Sprintf("before_id=%d", beforeID))
+		}
+		url += "?" + strings.Join(q, "&")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -511,6 +529,41 @@ func (c *Client) ListContacts(ctx context.Context, token string) ([]Contact, err
 	}
 
 	return result.Contacts, nil
+}
+
+// CreateDirectRoom opens or creates a 1:1 chat with another user.
+func (c *Client) CreateDirectRoom(ctx context.Context, token string, userID int64) (int64, error) {
+	body, _ := json.Marshal(map[string]int64{"user_id": userID})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/rooms/direct", bytes.NewBuffer(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return 0, fmt.Errorf("%s", errResp.Error)
+		}
+		return 0, fmt.Errorf("failed to create direct room: %s", resp.Status)
+	}
+
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+	return result.ID, nil
 }
 
 // CreateGroup creates a new group room.

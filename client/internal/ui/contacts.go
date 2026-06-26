@@ -18,27 +18,19 @@ type ContactsWindow struct {
 	state *state.AppState
 }
 
-type requestRow struct {
-	Req      api.ContactRequest
-	Incoming bool
-}
-
 // ShowContactsDialog shows a dialog for managing contacts.
 func ShowContactsDialog(s *state.AppState) {
 	cw := &ContactsWindow{state: s}
-	
+
 	content := cw.makeContent()
 	d := dialog.NewCustom("Contacts", "Close", content, s.Window)
 	d.Resize(fyne.NewSize(500, 400))
-	
-	// Initial load
+
 	cw.refresh()
-	
 	d.Show()
 }
 
 func (cw *ContactsWindow) makeContent() fyne.CanvasObject {
-	// 1. Invite Section
 	emailEntry := widget.NewEntry()
 	emailEntry.SetPlaceHolder("Email or Username")
 	inviteBtn := widget.NewButtonWithIcon("Invite", theme.ContentAddIcon(), func() {
@@ -47,12 +39,15 @@ func (cw *ContactsWindow) makeContent() fyne.CanvasObject {
 		}
 		go func() {
 			err := cw.state.API.InviteContact(context.Background(), cw.state.Token, emailEntry.Text)
-			if err != nil {
-				dialog.ShowError(err, cw.state.Window)
-				return
-			}
-			emailEntry.SetText("")
-			dialog.ShowInformation("Success", "Invitation sent!", cw.state.Window)
+			fyne.Do(func() {
+				if err != nil {
+					dialog.ShowError(err, cw.state.Window)
+					return
+				}
+				emailEntry.SetText("")
+				dialog.ShowInformation("Success", "Invitation sent!", cw.state.Window)
+				cw.refresh()
+			})
 		}()
 	})
 	inviteBox := container.NewBorder(nil, nil, nil, inviteBtn, emailEntry)
@@ -74,11 +69,11 @@ func (cw *ContactsWindow) makeContent() fyne.CanvasObject {
 	incomingRows := []api.ContactRequest{}
 	outgoingRows := []api.ContactRequest{}
 
-	// 2a. Incoming Requests
 	incomingList := widget.NewList(
 		func() int { return len(incomingRows) },
 		func() fyne.CanvasObject {
-			return container.NewBorder(nil, nil, nil, widget.NewButton("Accept", nil), widget.NewLabel("Request"))
+			row, _, _ := newLabelButtonRow("Accept")
+			return row
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			req := incomingRows[id]
@@ -86,9 +81,7 @@ func (cw *ContactsWindow) makeContent() fyne.CanvasObject {
 			label := box.Objects[0].(*widget.Label)
 			btn := box.Objects[1].(*widget.Button)
 
-			label.SetText(
-				"From " + fmt.Sprint(req.FromUserID) + " → you, status=" + req.Status,
-			)
+			label.SetText(formatRequestLabel(req, true))
 			btn.OnTapped = nil
 			btn.Enable()
 			if req.Status != "pending" {
@@ -100,69 +93,148 @@ func (cw *ContactsWindow) makeContent() fyne.CanvasObject {
 			btn.OnTapped = func() {
 				go func() {
 					err := cw.state.API.AcceptContact(context.Background(), cw.state.Token, req.ID)
-					if err != nil {
-						dialog.ShowError(err, cw.state.Window)
-						return
-					}
-					cw.refresh()
+					fyne.Do(func() {
+						if err != nil {
+							dialog.ShowError(err, cw.state.Window)
+							return
+						}
+						cw.refresh()
+					})
 				}()
 			}
 		},
 	)
 
-	// 2b. Outgoing Requests
 	outgoingList := widget.NewList(
 		func() int { return len(outgoingRows) },
 		func() fyne.CanvasObject { return widget.NewLabel("Request") },
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			req := outgoingRows[id]
 			label := obj.(*widget.Label)
-			label.SetText(
-				"You → " + fmt.Sprint(req.ToUserID) + ", status=" + req.Status,
-			)
+			label.SetText(formatRequestLabel(req, false))
 		},
 	)
 
-	// 3. Contacts List
+	contactsEmpty := widget.NewLabel("Нет контактов")
+	contactsEmpty.Hide()
+
 	contactsList := widget.NewList(
 		func() int { return len(cw.state.Contacts) },
 		func() fyne.CanvasObject {
-			return widget.NewLabel("Contact Name")
+			row, _, _ := newLabelButtonRow("Написать")
+			return row
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			contact := cw.state.Contacts[id]
-			label := obj.(*widget.Label)
+			box := obj.(*fyne.Container)
+			label := box.Objects[0].(*widget.Label)
+			btn := box.Objects[1].(*widget.Button)
+
 			label.SetText(contact.Username + " (" + contact.Email + ")")
+			btn.OnTapped = func() {
+				openDirectChat(cw.state, contact)
+			}
 		},
 	)
 
-	// Update lists when state changes
 	cw.state.OnContactsUpdate = func() {
 		incomingRows = buildRows(true)
 		outgoingRows = buildRows(false)
+		if len(cw.state.Contacts) == 0 {
+			contactsEmpty.Show()
+			contactsList.Hide()
+		} else {
+			contactsEmpty.Hide()
+			contactsList.Show()
+		}
 		incomingList.Refresh()
 		outgoingList.Refresh()
 		contactsList.Refresh()
 	}
 
+	contactsTab := container.NewStack(contactsEmpty, contactsList)
+
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Contacts", contactsList),
+		container.NewTabItem("Contacts", contactsTab),
 		container.NewTabItem("Incoming", incomingList),
 		container.NewTabItem("Outgoing", outgoingList),
 	)
 
-	return container.NewBorder(container.NewVBox(widget.NewLabelWithStyle("Add Contact", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), inviteBox, widget.NewSeparator()), nil, nil, nil, tabs)
+	return container.NewBorder(
+		container.NewVBox(
+			widget.NewLabelWithStyle("Add Contact", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			inviteBox,
+			widget.NewSeparator(),
+		),
+		nil, nil, nil,
+		tabs,
+	)
+}
+
+func formatRequestLabel(req api.ContactRequest, incoming bool) string {
+	name := req.PeerUsername
+	if name == "" {
+		name = req.PeerEmail
+	}
+	if name == "" {
+		if incoming {
+			name = fmt.Sprint(req.FromUserID)
+		} else {
+			name = fmt.Sprint(req.ToUserID)
+		}
+	}
+	if incoming {
+		return fmt.Sprintf("От %s, status=%s", name, req.Status)
+	}
+	return fmt.Sprintf("К %s, status=%s", name, req.Status)
 }
 
 func (cw *ContactsWindow) refresh() {
 	go func() {
 		ctx := context.Background()
-		contacts, _ := cw.state.API.ListContacts(ctx, cw.state.Token)
-		requests, _ := cw.state.API.GetContactRequests(ctx, cw.state.Token)
+		contacts, err := cw.state.API.ListContacts(ctx, cw.state.Token)
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(err, cw.state.Window)
+			})
+			return
+		}
+		requests, err := cw.state.API.GetContactRequests(ctx, cw.state.Token)
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(err, cw.state.Window)
+			})
+			return
+		}
+		fyne.Do(func() {
+			cw.state.SetContactsState(contacts, requests)
+		})
+	}()
+}
+
+func openDirectChat(s *state.AppState, contact api.Contact) {
+	go func() {
+		roomID, err := s.API.CreateDirectRoom(context.Background(), s.Token, contact.ID)
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(err, s.Window)
+			})
+			return
+		}
+
+		rooms, err := s.API.GetRooms(context.Background(), s.Token)
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(err, s.Window)
+			})
+			return
+		}
 
 		fyne.Do(func() {
-			cw.state.SetContacts(contacts)
-			cw.state.SetContactRequests(requests)
+			s.SetRooms(rooms)
+			if s.OnOpenRoom != nil {
+				s.OnOpenRoom(roomID)
+			}
 		})
 	}()
 }

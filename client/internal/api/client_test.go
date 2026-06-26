@@ -147,7 +147,7 @@ func TestClient_GetMessages_Success(t *testing.T) {
 	defer server.Close()
 
 	client := New(server.URL)
-	messages, err := client.GetMessages(context.Background(), "fake-token", 10)
+	messages, err := client.GetMessages(context.Background(), "fake-token", 10, 0, 0)
 	if err != nil {
 		t.Fatalf("GetMessages() error = %v", err)
 	}
@@ -156,6 +156,33 @@ func TestClient_GetMessages_Success(t *testing.T) {
 	}
 	if messages[0].Body != "SGVsbG8=" {
 		t.Fatalf("unexpected body: %q", messages[0].Body)
+	}
+}
+
+func TestClient_GetMessages_WithPagination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("limit") != "50" {
+			t.Fatalf("limit = %q, want 50", r.URL.Query().Get("limit"))
+		}
+		if r.URL.Query().Get("before_id") != "20" {
+			t.Fatalf("before_id = %q, want 20", r.URL.Query().Get("before_id"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"messages": []map[string]interface{}{
+				{"id": 15, "room_id": 10, "sender_id": 2, "type": "text", "body": "older"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	messages, err := client.GetMessages(context.Background(), "fake-token", 10, 50, 20)
+	if err != nil {
+		t.Fatalf("GetMessages() error = %v", err)
+	}
+	if len(messages) != 1 || messages[0].ID != 15 {
+		t.Fatalf("unexpected messages: %+v", messages)
 	}
 }
 
@@ -196,7 +223,11 @@ func TestClient_Contacts_Success(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"requests": []map[string]interface{}{
-					{"id": 1, "from_user_id": 2, "to_user_id": 1, "status": "pending", "created_at": "2026-06-25T10:00:00Z"},
+					{
+						"id": 1, "from_user_id": 2, "to_user_id": 1, "status": "pending",
+						"peer_email": "friend@example.com", "peer_username": "friend",
+						"created_at": "2026-06-25T10:00:00Z",
+					},
 				},
 			})
 		case "/contacts/requests/1/accept":
@@ -226,7 +257,7 @@ func TestClient_Contacts_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetContactRequests() error = %v", err)
 	}
-	if len(reqs) != 1 || reqs[0].FromUserID != 2 || reqs[0].ToUserID != 1 || reqs[0].Status != "pending" {
+	if len(reqs) != 1 || reqs[0].FromUserID != 2 || reqs[0].PeerUsername != "friend" {
 		t.Fatalf("unexpected requests: %+v", reqs)
 	}
 
@@ -240,8 +271,34 @@ func TestClient_Contacts_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListContacts() error = %v", err)
 	}
-	if len(contacts) != 1 || contacts[0].Username != "friend" {
+	if len(contacts) != 1 || contacts[0].ID != 2 || contacts[0].Username != "friend" || contacts[0].Email != "friend@example.com" {
 		t.Fatalf("unexpected contacts: %+v", contacts)
+	}
+}
+
+func TestClient_CreateDirectRoom_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rooms/direct" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		var req map[string]int64
+		json.NewDecoder(r.Body).Decode(&req)
+		if req["user_id"] != 2 {
+			t.Fatalf("user_id = %v", req["user_id"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{"id": 42, "peer_id": 2})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	roomID, err := client.CreateDirectRoom(context.Background(), "fake-token", 2)
+	if err != nil {
+		t.Fatalf("CreateDirectRoom() error = %v", err)
+	}
+	if roomID != 42 {
+		t.Fatalf("roomID = %d, want 42", roomID)
 	}
 }
 
