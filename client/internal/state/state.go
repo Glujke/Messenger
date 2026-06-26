@@ -314,10 +314,9 @@ func (s *AppState) SetToken(token string) {
 
 // Logout clears session state and triggers logout callback.
 func (s *AppState) Logout() {
-	if s.WSManager != nil {
-		s.WSManager.Stop()
-		s.WSManager = nil
-	}
+	mgr := s.WSManager
+	s.WSManager = nil
+
 	s.Token = ""
 	s.UserID = 0
 	s.Username = ""
@@ -335,6 +334,9 @@ func (s *AppState) Logout() {
 	}
 	if s.OnLogout != nil {
 		s.OnLogout()
+	}
+	if mgr != nil {
+		go mgr.Stop()
 	}
 }
 

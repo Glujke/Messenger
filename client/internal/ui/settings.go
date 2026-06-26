@@ -18,18 +18,20 @@ func ShowSettingsDialog(s *state.AppState) {
 	serverEntry.SetText(s.ServerURL)
 	serverEntry.SetPlaceHolder("http://itc05:8080")
 
+	var settingsDlg dialog.Dialog
 	content := container.NewVBox(
 		widget.NewLabel("Адрес сервера"),
 		serverEntry,
 		widget.NewSeparator(),
 		widget.NewButton("Выйти", func() {
 			if s.Token != "" {
+				settingsDlg.Hide()
 				s.Logout()
 			}
 		}),
 	)
 
-	d := dialog.NewCustomConfirm("Настройки", "Сохранить", "Отмена", content, func(save bool) {
+	settingsDlg = dialog.NewCustomConfirm("Настройки", "Сохранить", "Отмена", content, func(save bool) {
 		if !save {
 			return
 		}
@@ -41,6 +43,6 @@ func ShowSettingsDialog(s *state.AppState) {
 		s.SetServerURL(url)
 		dialog.ShowInformation("Настройки", "Адрес сервера сохранён. Изменения применятся при следующем входе.", s.Window)
 	}, s.Window)
-	d.Resize(fyne.NewSize(420, 200))
-	d.Show()
+	settingsDlg.Resize(fyne.NewSize(420, 200))
+	settingsDlg.Show()
 }

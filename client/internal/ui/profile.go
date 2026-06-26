@@ -74,7 +74,9 @@ func ShowProfileDialog(s *state.AppState) {
 		}()
 	})
 
+	var profileDlg dialog.Dialog
 	logoutBtn := widget.NewButton("Выйти", func() {
+		profileDlg.Hide()
 		s.Logout()
 	})
 
@@ -95,9 +97,9 @@ func ShowProfileDialog(s *state.AppState) {
 		logoutBtn,
 	)
 
-	d := dialog.NewCustom("Профиль", "Закрыть", content, s.Window)
-	d.Resize(fyne.NewSize(420, 480))
-	d.Show()
+	profileDlg = dialog.NewCustom("Профиль", "Закрыть", content, s.Window)
+	profileDlg.Resize(fyne.NewSize(420, 480))
+	profileDlg.Show()
 
 	go func() {
 		profile, err := s.API.GetMe(context.Background(), s.Token)

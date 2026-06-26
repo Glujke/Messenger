@@ -50,6 +50,7 @@ func (m *WSManager) Start() {
 		m.mu.Unlock()
 		return
 	}
+	m.stopCh = make(chan struct{})
 	m.doneCh = make(chan struct{})
 	m.mu.Unlock()
 
@@ -63,14 +64,14 @@ func (m *WSManager) Stop() {
 		m.mu.Unlock()
 		return
 	}
-	close(m.stopCh)
+	stopCh := m.stopCh
 	done := m.doneCh
 	conn := m.conn
 	m.conn = nil
 	m.doneCh = nil
-	m.stopCh = make(chan struct{})
 	m.mu.Unlock()
 
+	close(stopCh)
 	if conn != nil {
 		_ = conn.Close()
 	}
@@ -100,10 +101,14 @@ func (m *WSManager) Status() ConnectionStatus {
 func (m *WSManager) run() {
 	defer close(m.doneCh)
 
+	m.mu.Lock()
+	stopCh := m.stopCh
+	m.mu.Unlock()
+
 	backoff := time.Second
 	for {
 		select {
-		case <-m.stopCh:
+		case <-stopCh:
 			return
 		default:
 		}
@@ -112,7 +117,7 @@ func (m *WSManager) run() {
 		conn, err := Dial(m.serverURL, m.token)
 		if err != nil {
 			log.Printf("ws: dial error: %v", err)
-			if !m.sleep(backoff) {
+			if !m.sleep(stopCh, backoff) {
 				return
 			}
 			backoff = minDuration(backoff*2, 30*time.Second)
@@ -150,7 +155,7 @@ func (m *WSManager) run() {
 		}
 
 		select {
-		case <-m.stopCh:
+		case <-stopCh:
 			return
 		default:
 		}
@@ -172,11 +177,11 @@ func (m *WSManager) setStatus(status ConnectionStatus) {
 	}
 }
 
-func (m *WSManager) sleep(d time.Duration) bool {
+func (m *WSManager) sleep(stopCh <-chan struct{}, d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
 	select {
-	case <-m.stopCh:
+	case <-stopCh:
 		return false
 	case <-timer.C:
 		return true
