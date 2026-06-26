@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -261,5 +263,87 @@ func TestClient_CreateGroup_Success(t *testing.T) {
 	}
 	if id != 500 {
 		t.Fatalf("id = %d, want 500", id)
+	}
+}
+
+func TestClient_UploadAttachment_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		// Path is /rooms/10/attachments
+		if r.URL.Path != "/rooms/10/attachments" {
+			t.Errorf("expected /rooms/10/attachments, got %s", r.URL.Path)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{"id": 777})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	data := []byte("fake file content")
+	id, err := client.UploadAttachment(context.Background(), "fake-token", 10, "test.txt", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("UploadAttachment() error = %v", err)
+	}
+	if id != 777 {
+		t.Fatalf("id = %d, want 777", id)
+	}
+}
+
+func TestClient_DownloadAttachment_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/attachments/777" {
+			t.Errorf("expected /attachments/777, got %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("file data"))
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	reader, err := client.DownloadAttachment(context.Background(), "fake-token", 777)
+	if err != nil {
+		t.Fatalf("DownloadAttachment() error = %v", err)
+	}
+	defer reader.Close()
+
+	content, _ := io.ReadAll(reader)
+	if string(content) != "file data" {
+		t.Fatalf("content = %q, want %q", string(content), "file data")
+	}
+}
+
+func TestClient_SendAttachmentMessage_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rooms/10/messages" {
+			t.Errorf("expected /rooms/10/messages, got %s", r.URL.Path)
+		}
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req["attachment_id"] != float64(777) {
+			t.Fatalf("unexpected attachment_id: %v", req["attachment_id"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id": 101, "room_id": 10, "sender_id": 1, "type": "image", "body": "caption",
+			"attachment": map[string]interface{}{
+				"id": 777, "filename": "photo.png", "content_type": "image/png", "size_bytes": 100,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := New(server.URL)
+	msg, err := client.SendAttachmentMessage(context.Background(), "fake-token", 10, 777, "caption")
+	if err != nil {
+		t.Fatalf("SendAttachmentMessage() error = %v", err)
+	}
+	if msg.Attachment == nil || msg.Attachment.Filename != "photo.png" {
+		t.Fatalf("unexpected message: %+v", msg)
 	}
 }

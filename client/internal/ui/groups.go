@@ -19,7 +19,9 @@ func ShowCreateGroupDialog(s *state.AppState) {
 	// Fetch fresh contacts
 	go func() {
 		contacts, _ := s.API.ListContacts(context.Background(), s.Token)
-		s.SetContacts(contacts)
+		state.RunOnUI(func() {
+			s.SetContacts(contacts)
+		})
 	}()
 
 	selectedIDs := make(map[int64]bool)
@@ -72,13 +74,16 @@ func ShowCreateGroupDialog(s *state.AppState) {
 		go func() {
 			_, err := s.API.CreateGroup(context.Background(), s.Token, name, userIDs)
 			if err != nil {
-				dialog.ShowError(err, s.Window)
+				fyne.Do(func() {
+					dialog.ShowError(err, s.Window)
+				})
 				return
 			}
-			
-			// Refresh rooms
+
 			rooms, _ := s.API.GetRooms(context.Background(), s.Token)
-			s.SetRooms(rooms)
+			fyne.Do(func() {
+				s.SetRooms(rooms)
+			})
 		}()
 	}, s.Window)
 

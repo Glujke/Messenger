@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"time"
 )
@@ -109,14 +110,23 @@ type Room struct {
 	PeerEmail string `json:"peer_email,omitempty"`
 }
 
+// Attachment describes a file attached to a message.
+type Attachment struct {
+	ID          int64  `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
 // Message represents a chat message in the API.
 type Message struct {
-	ID        int64  `json:"id"`
-	RoomID    int64  `json:"room_id"`
-	SenderID  int64  `json:"sender_id"`
-	Type      string `json:"type"`
-	Body      string `json:"body"`
-	CreatedAt string `json:"created_at"`
+	ID         int64       `json:"id"`
+	RoomID     int64       `json:"room_id"`
+	SenderID   int64       `json:"sender_id"`
+	Type       string      `json:"type"`
+	Body       string      `json:"body"`
+	Attachment *Attachment `json:"attachment,omitempty"`
+	CreatedAt  string      `json:"created_at"`
 }
 
 // ContactRequest represents a contact invitation (incoming or outgoing).
@@ -230,6 +240,44 @@ func (c *Client) SendMessage(ctx context.Context, token string, roomID int64, bo
 			return Message{}, fmt.Errorf("%s", errResp.Error)
 		}
 		return Message{}, fmt.Errorf("failed to send message: %s", resp.Status)
+	}
+
+	var msg Message
+	if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
+		return Message{}, err
+	}
+
+	return msg, nil
+}
+
+// SendAttachmentMessage links an uploaded attachment to a new room message.
+func (c *Client) SendAttachmentMessage(ctx context.Context, token string, roomID, attachmentID int64, body string) (Message, error) {
+	url := fmt.Sprintf("%s/rooms/%d/messages", c.baseURL, roomID)
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"attachment_id": attachmentID,
+		"body":          body,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return Message{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return Message{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return Message{}, fmt.Errorf("%s", errResp.Error)
+		}
+		return Message{}, fmt.Errorf("failed to send attachment message: %s", resp.Status)
 	}
 
 	var msg Message
@@ -401,6 +449,79 @@ func (c *Client) CreateGroup(ctx context.Context, token, name string, userIDs []
 	}
 
 	return result.ID, nil
+}
+
+// UploadAttachment uploads a file to a room and returns the attachment ID.
+func (c *Client) UploadAttachment(ctx context.Context, token string, roomID int64, filename string, r io.Reader) (int64, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := io.Copy(part, r); err != nil {
+		return 0, err
+	}
+	writer.Close()
+
+	url := fmt.Sprintf("%s/rooms/%d/attachments", c.baseURL, roomID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return 0, fmt.Errorf("%s", errResp.Error)
+		}
+		return 0, fmt.Errorf("failed to upload attachment: %s", resp.Status)
+	}
+
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+
+	return result.ID, nil
+}
+
+// DownloadAttachment returns a reader for the attachment data.
+func (c *Client) DownloadAttachment(ctx context.Context, token string, attachmentID int64) (io.ReadCloser, error) {
+	url := fmt.Sprintf("%s/attachments/%d", c.baseURL, attachmentID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		var errResp errorResponse
+		json.NewDecoder(resp.Body).Decode(&errResp)
+		if errResp.Error != "" {
+			return nil, fmt.Errorf("%s", errResp.Error)
+		}
+		return nil, fmt.Errorf("failed to download attachment: %s", resp.Status)
+	}
+
+	return resp.Body, nil
 }
 
 // Health checks whether the backend is reachable.

@@ -16,54 +16,70 @@ import (
 func main() {
 	cfg := config.Default()
 	a := app.New()
-	w := a.NewWindow("Messenger")
+	w := a.NewWindow(cfg.AppName)
 	w.Resize(fyne.NewSize(400, 500))
 	w.SetFixedSize(false)
 	w.CenterOnScreen()
 	// Set minimum size to prevent UI breaking
 	w.SetPadded(true)
 
-	s := state.New(a, w, cfg.ServerURL, cfg.EncryptionKey)
+	s := state.New(a, w, cfg.ServerURL, cfg.EncryptionKey, cfg.AppName)
 
 	// Define what happens after login
 	s.OnLogin = func() {
 		go func() {
-			// 1. Load rooms
+			log.Printf("post-login: fetching rooms")
 			rooms, err := s.API.GetRooms(context.Background(), s.Token)
 			if err != nil {
-				dialog.ShowError(err, w)
+				log.Printf("post-login: rooms error: %v", err)
+				fyne.Do(func() {
+					dialog.ShowError(err, w)
+				})
 				return
 			}
-			s.SetRooms(rooms)
+			log.Printf("post-login: got %d rooms", len(rooms))
 
-			// 2. Initialize WebSocket
+			log.Printf("post-login: dialing websocket")
 			ws, err := api.Dial(cfg.ServerURL, s.Token)
 			if err != nil {
-				log.Printf("WebSocket connection failed: %v", err)
+				log.Printf("post-login: websocket error: %v", err)
 			} else {
-				s.WS = ws
-				go func() {
-					for {
-						event, err := ws.ReadEvent()
-						if err != nil {
-							log.Printf("WS read error: %v", err)
-							return
-						}
-						if event.Type == api.ServerEventNewMessage {
-							// Only add if it's for the active room (or we can handle background updates later)
-							if event.Message.RoomID == s.ActiveRoomID {
-								s.AddMessage(event.Message)
-							}
-						}
-					}
-				}()
+				log.Printf("post-login: websocket connected")
 			}
 
-			// 3. Switch to main screen
-			mainScreen := ui.NewMainScreen(s)
-			w.SetContent(mainScreen.Content())
-			w.Resize(fyne.NewSize(900, 600))
-			w.CenterOnScreen()
+			fyne.Do(func() {
+				mainScreen := ui.NewMainScreen(s)
+				s.Rooms = rooms
+				w.SetContent(mainScreen.Content())
+
+				mainScreen.EnableInteraction()
+				if s.OnRoomsUpdate != nil {
+					s.OnRoomsUpdate()
+				}
+
+				w.Resize(fyne.NewSize(900, 600))
+				log.Printf("post-login: UI ready")
+
+				if ws != nil {
+					s.WS = ws
+					go func() {
+						for {
+							event, err := ws.ReadEvent()
+							if err != nil {
+								log.Printf("WS read error: %v", err)
+								return
+							}
+							if event.Type == api.ServerEventNewMessage {
+								if event.Message.RoomID == s.ActiveRoomID {
+									state.RunOnUI(func() {
+										s.AddMessage(event.Message)
+									})
+								}
+							}
+						}
+					}()
+				}
+			})
 		}()
 	}
 

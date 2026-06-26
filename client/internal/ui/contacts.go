@@ -158,9 +158,11 @@ func (cw *ContactsWindow) refresh() {
 	go func() {
 		ctx := context.Background()
 		contacts, _ := cw.state.API.ListContacts(ctx, cw.state.Token)
-		cw.state.SetContacts(contacts)
-		
 		requests, _ := cw.state.API.GetContactRequests(ctx, cw.state.Token)
-		cw.state.SetContactRequests(requests)
+
+		fyne.Do(func() {
+			cw.state.SetContacts(contacts)
+			cw.state.SetContactRequests(requests)
+		})
 	}()
 }

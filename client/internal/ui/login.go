@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"log"
 	"messenger/client/internal/state"
 
 	"fyne.io/fyne/v2"
@@ -32,18 +33,19 @@ func (s *LoginScreen) Content() fyne.CanvasObject {
 	loginBtn = widget.NewButton("Login", func() {
 		loginBtn.Disable()
 		loginBtn.SetText("Logging in...")
-		
-		go func() {
-			defer func() {
-				loginBtn.Enable()
-				loginBtn.SetText("Login")
-			}()
 
+		go func() {
 			token, err := s.state.API.Login(context.Background(), emailEntry.Text, passwordEntry.Text)
 			if err != nil {
-				dialog.ShowError(err, s.state.Window)
+				log.Printf("login: api error: %v", err)
+				fyne.Do(func() {
+					dialog.ShowError(err, s.state.Window)
+					loginBtn.Enable()
+					loginBtn.SetText("Login")
+				})
 				return
 			}
+			log.Printf("login: success, starting post-login flow")
 			s.state.SetToken(token)
 		}()
 	})

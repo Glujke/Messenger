@@ -37,18 +37,19 @@ func (s *RegisterScreen) Content() fyne.CanvasObject {
 		registerBtn.SetText("Registering...")
 
 		go func() {
-			defer func() {
-				registerBtn.Enable()
-				registerBtn.SetText("Register")
-			}()
-
 			err := s.state.API.Register(context.Background(), emailEntry.Text, usernameEntry.Text, passwordEntry.Text)
 			if err != nil {
-				dialog.ShowError(err, s.state.Window)
+				fyne.Do(func() {
+					dialog.ShowError(err, s.state.Window)
+					registerBtn.Enable()
+					registerBtn.SetText("Register")
+				})
 				return
 			}
-			dialog.ShowInformation("Success", "Account created! Please login.", s.state.Window)
-			s.showLogin()
+			fyne.Do(func() {
+				dialog.ShowInformation("Success", "Account created! Please login.", s.state.Window)
+				s.showLogin()
+			})
 		}()
 	})
 	registerBtn.Importance = widget.HighImportance
