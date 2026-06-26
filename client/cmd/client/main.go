@@ -11,6 +11,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -18,6 +20,26 @@ func main() {
 	cfg := config.Default()
 	a := app.NewWithID(cfg.AppName)
 	w := a.NewWindow(cfg.AppName)
+
+	if desk, ok := a.(desktop.App); ok {
+		// Создаем меню в трее
+		menu := fyne.NewMenu("MyApp",
+			fyne.NewMenuItem("Показать", func() {
+				w.Show()
+			}),
+			fyne.NewMenuItem("Закрыть", func() {
+				a.Quit()
+			}),
+		)
+		desk.SetSystemTrayMenu(menu)
+
+		desk.SetSystemTrayIcon(theme.FyneLogo())
+	}
+
+	w.SetCloseIntercept(func() {
+		w.Hide()
+	})
+
 	w.Resize(fyne.NewSize(400, 500))
 	w.SetFixedSize(false)
 	w.CenterOnScreen()
